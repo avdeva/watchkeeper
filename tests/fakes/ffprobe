@@ -1,0 +1,41 @@
+#!/usr/bin/env python3
+"""Fake ffprobe for tests (reads the JSON header written by the fake ffmpeg)."""
+import json
+import os
+import sys
+
+argv = sys.argv[1:]
+path = argv[-1]
+
+# Watchkeeper must name the container and allow only local files (see Media.InputArgs)
+if "-protocol_whitelist" not in argv or argv[argv.index("-protocol_whitelist") + 1] != "file" or "-f" not in argv or argv[-2] != "-i":
+    sys.stderr.write("[fake] input not locked down\n")
+    sys.exit(3)
+
+try:
+    with open(path) as fh:
+        meta = json.load(fh)
+    if not meta.get("fake"):
+        raise ValueError
+except Exception:
+    sys.stderr.write(f"{path}: Invalid data found when processing input\n")
+    sys.exit(1)
+
+if "csv=p=0" in argv:  # duration only
+    print(meta.get("duration", 10))
+    sys.exit(0)
+
+stream = {
+    "codec_name": meta.get("codec", "h264"),
+    "width": meta["width"],
+    "height": meta["height"],
+    "r_frame_rate": "30/1",
+    "duration": str(meta.get("duration", 10)),
+}
+fmt = {"duration": str(meta.get("duration", 10))}
+if not meta.get("no_bitrate"):
+    stream["bit_rate"] = str(meta.get("bit_rate", 8000000))
+    fmt["bit_rate"] = str(meta.get("bit_rate", 8000000))
+if meta.get("stream_bitrate_missing"):
+    stream.pop("bit_rate", None)  # container bit rate only
+print(json.dumps({"streams": [stream], "format": fmt}))

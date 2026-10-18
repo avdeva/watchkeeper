@@ -1,0 +1,116 @@
+#!/usr/bin/env python3
+"""Fake ffmpeg for tests. Media files are small JSON headers describing the
+video, so no real encoding is needed.
+
+Environment knobs:
+  FAKE_LOG              append one JSON line per invocation (argv)
+  FAKE_DELAY            seconds the "encode" takes (default 0.3)
+  FAKE_FAIL_ENCODER     exit 1 when this encoder (-c:v value) is requested
+  FAKE_FAIL_HWDEC       exit 1 when hardware decoding (-hwaccel) is requested
+  FAKE_FAIL_UNLESS_ENV  exit 1 unless the named environment variable is set (user-session runs set FFREPORT)
+  FAKE_ENCODERS         comma separated encoder list for `-encoders`
+Filename knobs: FAILME in the input name -> fail; SHORTOUT -> output duration halved.
+"""
+import json
+import os
+import re
+import sys
+import time
+
+argv = sys.argv[1:]
+log = os.environ.get("FAKE_LOG")
+if log:
+    with open(log, "a") as fh:
+        fh.write(json.dumps(argv) + "\n")
+
+if "-version" in argv:
+    print("ffmpeg version fake-1.0 Copyright (c) test")
+    sys.exit(0)
+
+if "-encoders" in argv:
+    names = os.environ.get(
+        "FAKE_ENCODERS", "h264_qsv,hevc_qsv,h264_nvenc,hevc_nvenc,h264_amf,hevc_amf,libx264,libx265"
+    ).split(",")
+    print("Encoders:\n ------")
+    for n in names:
+        print(f" V....D {n:<18} fake encoder")
+    print(" A....D aac                 AAC")
+    sys.exit(0)
+
+
+def opt(name, default=None):
+    if name in argv:
+        i = argv.index(name)
+        if i + 1 < len(argv):
+            return argv[i + 1]
+    return default
+
+
+out = argv[-1]
+
+if "lavfi" in argv:  # sample clip generation for the encoder test
+    with open(out, "w") as fh:
+        json.dump({"fake": True, "width": 1920, "height": 1080, "duration": 2.0,
+                   "bit_rate": 4000000, "codec": "h264"}, fh)
+    sys.exit(0)
+
+src = opt("-i")
+# like the real program, but stricter: Watchkeeper must name the container and allow only local files
+if opt("-protocol_whitelist") != "file" or opt("-f") is None or argv.index("-f") > argv.index("-i"):
+    sys.stderr.write("[fake] input not locked down: -protocol_whitelist file and -f <container> must come before -i\n")
+    sys.exit(3)
+encoder = opt("-c:v", "")
+if os.environ.get("FAKE_FAIL_ENCODER") and os.environ["FAKE_FAIL_ENCODER"] == encoder:
+    sys.stderr.write(f"[fake] Error initializing encoder {encoder}\n")
+    sys.exit(1)
+
+if os.environ.get("FAKE_FAIL_UNLESS_ENV") and not os.environ.get(os.environ["FAKE_FAIL_UNLESS_ENV"]):
+    sys.stderr.write("[fake] Device creation failed (not in the user session)\n")
+    sys.exit(1)
+
+if os.environ.get("FAKE_FAIL_HWDEC") and "-hwaccel" in argv:
+    sys.stderr.write("[fake] Hardware decoder initialisation failed\n")
+    sys.exit(1)
+
+try:
+    with open(src) as fh:
+        meta = json.load(fh)
+except Exception:
+    sys.stderr.write("[fake] cannot read input\n")
+    sys.exit(1)
+
+if "FAILME" in os.path.basename(src):
+    with open(out, "w") as fh:
+        fh.write("partial garbage")
+    sys.stderr.write("[fake] Conversion failed!\n")
+    sys.exit(1)
+
+w, h = meta["width"], meta["height"]
+vf = opt("-vf", "")
+if "transpose=" in vf or "vpp_qsv=transpose" in vf:
+    w, h = h, w
+m = re.search(r"scale(?:_qsv)?=(?:w=)?(\d+):(?:h=)?(\d+)", vf)
+if m:
+    w, h = int(m.group(1)), int(m.group(2))
+
+duration = float(meta.get("duration", 10))
+if "-progress" in argv:
+    target = opt("-progress")
+    sink = sys.stdout if target == "pipe:1" else open(target, "a")
+    total = float(os.environ.get("FAKE_DELAY", "0.3"))
+    steps = 5
+    for i in range(1, steps + 1):
+        time.sleep(total / steps)
+        sink.write(f"fps=30.0\nout_time_us={int(duration * 1e6 * i / steps)}\nspeed=2.0x\nprogress=continue\n")
+        sink.flush()
+    sink.write("progress=end\n")
+    sink.flush()
+else:
+    time.sleep(float(os.environ.get("FAKE_DELAY", "0.3")))
+
+out_duration = duration / 2 if "SHORTOUT" in os.path.basename(src) else duration
+codec = "hevc" if "hevc" in encoder or encoder == "libx265" else "h264"
+with open(out, "w") as fh:
+    json.dump({"fake": True, "width": w, "height": h, "duration": out_duration,
+               "bit_rate": 5000000, "codec": codec}, fh)
+sys.exit(0)
