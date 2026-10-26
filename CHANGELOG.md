@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.2.2
+- Earlier versions of the configuration are kept. Before every save from the manager, an import, a restore or a deploy, the file as it was is written to `backups\config-<date>-<time>-<reason>.json` next to it (the newest 50) and to `config.json.bak`. A change made outside Watchkeeper (Notepad, a copy) keeps the settings that were in force the same way. A save that does not change anything keeps nothing new.
+- A save is refused ("nothing was saved") when the current file cannot be kept first. Before, a failed copy to `config.json.bak` was ignored and the save went ahead, and `config.json.bak` only ever held the one previous save.
+- Service & settings > **Earlier versions...** lists the kept versions with what each contains, shows one, and restores one (the current settings are kept as a version first, so a restore can be undone the same way).
+- Kept versions are part of the protected settings folder: one another account wrote there is set aside like a planted configuration file, and passwords in them are re-encrypted with the service's key like those in the configuration.
+
+## 3.2.1
+- Fix: recordings that have a second name (a hard link) were refused by folder policies ("has more than one name (hard link); it is left alone") since 3.1.0. A second name is now refused only where it could matter: deleting it or moving it on the same drive touches only that name and always works; copying it, moving it to another drive or handing it to a script works when an account that is not an administrator may read the file anyway (so nothing protected can be copied out through a planted second name); changing its Date Modified works when such an account may change it. Files in the settings folder still may not have a second name.
+
 ## 3.2.0
 New part **Studios**: switching a server between studio configurations, decided by Pathfinder.
 - Studios with codes; watchdog entries belong to one or more studios (untagged entries run in every studio). While a studio is active only its programs (and untagged ones) run.

@@ -1333,6 +1333,10 @@ namespace Watchkeeper
         string guardProblem;        // the settings folder is not protected (DataDirSecurity.Verify)
         string backupInUse;         // running from config.json.bak because config.json cannot be read
         double guardAt;
+        string loadedText;          // the text last accepted (kept as a version when the file is changed by hand)
+
+        /// <summary>How many earlier versions are kept in the backups folder.</summary>
+        public int KeepVersions = 50;
 
         /// <summary>Encrypts a secret typed in ("plain:" or plain text) when the file is written: the manager asks the service
         /// (its own key), the service uses its own key. Null: values are written as they are.</summary>
@@ -1366,6 +1370,79 @@ namespace Watchkeeper
         }
 
         public string Path { get { return path; } }
+
+        /// <summary>Earlier versions of the file: backups\config-yyyyMMdd-HHmmss-fff-why.json next to it.</summary>
+        public string BackupDir { get { return System.IO.Path.Combine(System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(path)), "backups"); } }
+
+        public class Version
+        {
+            public string File = "";
+            public DateTime Time;
+            public string Why = "";
+            public long Bytes;
+        }
+
+        /// <summary>Keep the file as it is now as a version (before something else replaces it, such as a deploy).</summary>
+        public void KeepCurrent(string why)
+        {
+            lock (lk)
+            {
+                if (File.Exists(path)) KeepVersion(ReadWithRetry(path), why);
+            }
+        }
+
+        /// <summary>The kept versions, newest first.</summary>
+        public List<Version> Versions()
+        {
+            List<Version> o = new List<Version>();
+            try
+            {
+                if (!Directory.Exists(BackupDir)) return o;
+                foreach (string f in Directory.GetFiles(BackupDir, "config-*.json"))
+                {
+                    Version v = new Version();
+                    v.File = f;
+                    string[] p = System.IO.Path.GetFileNameWithoutExtension(f).Split('-');
+                    DateTime t;
+                    if (p.Length >= 4 && DateTime.TryParseExact(p[1] + p[2] + p[3], "yyyyMMddHHmmssfff", Util.Inv, System.Globalization.DateTimeStyles.None, out t)) v.Time = t;
+                    else v.Time = File.GetLastWriteTime(f);
+                    v.Why = p.Length >= 5 ? string.Join("-", p, 4, p.Length - 4) : "";
+                    try { v.Bytes = new FileInfo(f).Length; } catch (Exception) { }
+                    o.Add(v);
+                }
+            }
+            catch (Exception ex) { if (log != null) log.Warn("Cannot list the earlier versions of the configuration: " + ex.Message); }
+            o.Sort(delegate(Version a, Version b) { return b.Time.CompareTo(a.Time); });
+            return o;
+        }
+
+        /// <summary>Keep this text as a version (unless the newest kept version is the same), and as config.json.bak.
+        /// Throws when it cannot be written.</summary>
+        void KeepVersion(string text, string why)
+        {
+            if (string.IsNullOrEmpty(text)) return;
+            Directory.CreateDirectory(BackupDir);
+            List<Version> all = Versions();
+            bool same = false;
+            if (all.Count > 0)
+            {
+                try { same = File.ReadAllText(all[0].File) == text; } catch (Exception) { }
+            }
+            if (!same)
+            {
+                DateTime now = DateTime.Now;
+                string file = System.IO.Path.Combine(BackupDir, "config-" + now.ToString("yyyyMMdd-HHmmss-fff", Util.Inv) + "-" + why + ".json");
+                for (int i = 1; File.Exists(file); i++)
+                    file = System.IO.Path.Combine(BackupDir, "config-" + now.AddMilliseconds(i).ToString("yyyyMMdd-HHmmss-fff", Util.Inv) + "-" + why + ".json");
+                Util.WriteAtomic(file, text);
+                all = Versions();
+            }
+            Util.WriteAtomic(path + ".bak", text);
+            for (int i = KeepVersions; i < all.Count; i++)
+            {
+                try { File.Delete(all[i].File); } catch (Exception) { }
+            }
+        }
         public string LoadedHash { get { lock (lk) return loadedHash; } }
         public double LoadedAt { get { lock (lk) return loadedAt; } }
         public List<string> Problems { get { lock (lk) return new List<string>(problems); } }
@@ -1476,6 +1553,7 @@ namespace Watchkeeper
         void Accept(AppConfig c, string text)
         {
             cfg = c;
+            loadedText = text;
             loadedHash = Cfg.Hash(text);
             loadedAt = Util.Now();
             problems = WithSafeReason(Cfg.ValidateAll(c));
@@ -1542,6 +1620,12 @@ namespace Watchkeeper
                 }
                 string hash = Cfg.Hash(text);
                 bool same = hash == loadedHash && backupInUse == null;
+                if (hash != loadedHash && loadedText != null && backupInUse == null)
+                {
+                    // changed outside Watchkeeper (Notepad, a deploy, a copy): the settings that were in force are kept as a version
+                    try { KeepVersion(loadedText, "before-edit"); }
+                    catch (Exception ex) { if (log != null) log.Warn("Could not keep the previous configuration as a version: " + ex.Message); }
+                }
                 backupInUse = null;
                 Accept(loaded, text);
                 result = new List<string>(problems);
@@ -1570,7 +1654,11 @@ namespace Watchkeeper
             catch (Exception ex) { if (log != null) log.Error("Config listener failed: " + ex.Message); }
         }
 
-        void Write(AppConfig candidate)
+        void Write(AppConfig candidate) { Write(candidate, "save"); }
+
+        /// <summary>Write the file. The file as it is now is kept first (backups folder and config.json.bak); when that
+        /// fails nothing is written. why = null: no version is kept (only the encryption of secrets changes).</summary>
+        void Write(AppConfig candidate, string why)
         {
             if (Protector != null)
                 Cfg.ForEachSecret(candidate, delegate(string label, string v)
@@ -1580,11 +1668,16 @@ namespace Watchkeeper
                     return Protector(Secrets.Peek(v));
                 });
             string text = Cfg.ToText(candidate);
-            if (File.Exists(path))
+            if (why != null && File.Exists(path))
             {
-                try { File.Copy(path, path + ".bak", true); } catch (Exception) { }
+                string current;
+                try { current = ReadWithRetry(path); }
+                catch (Exception ex) { throw new IOException("the current configuration could not be read to keep a copy (" + ex.Message + "); nothing was saved"); }
+                try { if (current != text) KeepVersion(current, why); }      // an unchanged save keeps nothing new
+                catch (Exception ex) { throw new IOException("the current configuration could not be kept as a backup (" + ex.Message + "); nothing was saved"); }
             }
             Util.WriteAtomic(path, text);
+            loadedText = text;
             cfg = candidate;
             loadedHash = Cfg.Hash(text);
             loadedAt = Util.Now();
@@ -1614,7 +1707,8 @@ namespace Watchkeeper
                 Cfg.Normalize(candidate);
                 errors = Cfg.Validate(candidate, name);
                 if (errors.Count > 0) return errors;
-                Write(candidate);
+                try { Write(candidate, "before-" + name); }
+                catch (Exception ex) { errors.Add("not saved: " + ex.Message); return errors; }
             }
             Raise(name);
             return errors;
@@ -1635,10 +1729,12 @@ namespace Watchkeeper
                     n = Cfg.ProtectSecrets(c, protect);
                     Func<string, string> keep = Protector;
                     Protector = null;
-                    try { Write(c); }
+                    try { Write(c, null); }
                     finally { Protector = keep; }
                 }
-                foreach (string extra in new[] { path + ".bak", path + ".before-deploy" })
+                List<string> extras = new List<string> { path + ".bak", path + ".before-deploy" };
+                foreach (Version v in Versions()) extras.Add(v.File);
+                foreach (string extra in extras)
                 {
                     try
                     {
@@ -1655,7 +1751,10 @@ namespace Watchkeeper
         }
 
         /// <summary>Replace the whole configuration (import). Every section must validate.</summary>
-        public List<string> SaveAll(AppConfig value)
+        public List<string> SaveAll(AppConfig value) { return SaveAll(value, "import"); }
+
+        /// <summary>Replace the whole configuration; why names the kept version of the current one (import, restore).</summary>
+        public List<string> SaveAll(AppConfig value, string why)
         {
             List<string> errors;
             lock (lk)
@@ -1664,7 +1763,8 @@ namespace Watchkeeper
                 Cfg.Normalize(candidate);
                 errors = Cfg.ValidateAll(candidate);
                 if (errors.Count > 0) return errors;
-                Write(candidate);
+                try { Write(candidate, "before-" + why); }
+                catch (Exception ex) { errors.Add("not saved: " + ex.Message); return errors; }
             }
             Raise("*");
             return errors;

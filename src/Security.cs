@@ -369,7 +369,7 @@ namespace Watchkeeper
             string name = Path.GetFileName(file).ToLowerInvariant();
             if (name.StartsWith("config.json")) return true;
             string rel = file.Substring(dataDir.Length).TrimStart('\\', '/').ToLowerInvariant();
-            return rel.StartsWith("state\\") || rel.StartsWith("state/");
+            return rel.StartsWith("state\\") || rel.StartsWith("state/") || rel.StartsWith("backups\\") || rel.StartsWith("backups/");
         }
 
         /// <summary>A file another account could have written: owned by an account that is not an administrator, or an

@@ -260,7 +260,11 @@ namespace Watchkeeper.UI
                             "or run again with --allow-untrusted-paths (they will still not run until they are protected).");
                         return 1;
                     }
-                    if (File.Exists(target)) File.Copy(target, target + ".before-deploy", true);
+                    if (File.Exists(target))
+                    {
+                        File.Copy(target, target + ".before-deploy", true);
+                        new ConfigStore(target, null).KeepCurrent("before-deploy");
+                    }
                     Util.WriteAtomic(target, Cfg.ToText(c));
                     Out("Configuration written to " + target + (n > 0 ? " (" + n + " password(s) encrypted for this computer)" : "") + ".");
                 }

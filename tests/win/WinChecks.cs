@@ -59,6 +59,8 @@ static class WinChecks
         }
     }
 
+    static bool SameDrive(string a, string b) { return string.Equals(Path.GetPathRoot(a), Path.GetPathRoot(b), StringComparison.OrdinalIgnoreCase); }
+
     static void Cmd(string line) { Run(Path.Combine(Sys, "cmd.exe"), "/d /c " + line); }
     static void Junction(string link, string target) { Cmd("mklink /J \"" + link + "\" \"" + target + "\""); }
     static void FileLink(string link, string target) { Cmd("mklink \"" + link + "\" \"" + target + "\""); }
@@ -379,15 +381,46 @@ static class WinChecks
             Directory.Move(Path.Combine(src, "moved"), Path.Combine(src, "real"));
             return null;
         });
-        Check("a hard link to another file is not deleted", delegate
+        Check("deleting a second name (hard link) removes only that name, not the file", delegate
         {
             HardLink(Path.Combine(src, "hl.txt"), Path.Combine(victim, "keep.txt"));
+            using (SafeDir d = SafeDir.Open(src, false)) SafeFs.Delete(d, "hl.txt");
+            return Expect(!File.Exists(Path.Combine(src, "hl.txt")) && File.ReadAllText(Path.Combine(victim, "keep.txt")) == "keep", "the file itself changed");
+        });
+        Check("a second name for a file only administrators can read is not copied out", delegate
+        {
+            string secret = Path.Combine(victim, "secret.txt");
+            File.WriteAllText(secret, "secret");
+            FileSecurity fs = new FileSecurity();
+            fs.SetAccessRuleProtection(true, false);
+            fs.SetOwner(Trust.Administrators);
+            fs.AddAccessRule(new FileSystemAccessRule(Trust.Administrators, FileSystemRights.FullControl, AccessControlType.Allow));
+            fs.AddAccessRule(new FileSystemAccessRule(Trust.System, FileSystemRights.FullControl, AccessControlType.Allow));
+            File.SetAccessControl(secret, fs);
+            HardLink(Path.Combine(src, "planted.txt"), secret);
             using (SafeDir d = SafeDir.Open(src, false))
+            using (SafeDir o = SafeDir.Open(dst, false))
             {
-                string t = Throws<SafeFsException>(delegate { SafeFs.Delete(d, "hl.txt"); }, "more than one name");
-                if (t != null) return t;
+                string t = Throws<SafeFsException>(delegate { SafeFs.Copy(d, "planted.txt", o, "planted.txt", true); }, "only administrators may read") ??
+                           Throws<SafeFsException>(delegate { SafeFs.Move(d, "planted.txt", o, "planted.txt", true); }, "only administrators may read");
+                if (t != null && !SameDrive(src, dst)) return t;
             }
-            return Expect(File.ReadAllText(Path.Combine(victim, "keep.txt")) == "keep", "the target changed");
+            return Expect(!File.Exists(Path.Combine(dst, "planted.txt")) || SameDrive(src, dst), "the protected file was copied out");
+        });
+        Check("a recording with a second name that its users can read is copied and moved", delegate
+        {
+            string rec = Path.Combine(victim, "rec.mp4");
+            File.WriteAllText(rec, "video");
+            Grant(rec, Users, FileSystemRights.Read, false);
+            HardLink(Path.Combine(src, "rec.mp4"), rec);
+            using (SafeDir d = SafeDir.Open(src, false))
+            using (SafeDir o = SafeDir.Open(dst, false))
+            {
+                SafeFs.Copy(d, "rec.mp4", o, "rec-copy.mp4", true);
+                SafeFs.Move(d, "rec.mp4", o, "rec.mp4", true);
+            }
+            return Expect(File.ReadAllText(Path.Combine(dst, "rec-copy.mp4")) == "video" && File.Exists(Path.Combine(dst, "rec.mp4")) &&
+                          !File.Exists(Path.Combine(src, "rec.mp4")) && File.ReadAllText(rec) == "video", "not copied or moved");
         });
         Check("a file symbolic link is not deleted, copied or moved", delegate
         {

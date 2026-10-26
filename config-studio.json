@@ -19,7 +19,7 @@
   },
   "folders": [
     {
-      "id": "6e3c974d",
+      "id": "d84b0799",
       "name": "Move ISO  T: > D:",
       "enabled": false,
       "path": "T:\\ISO",
@@ -36,7 +36,7 @@
       "remove_empty_folders": false,
       "rules": [
         {
-          "id": "1062db8e",
+          "id": "c5c59283",
           "name": "Move every file",
           "enabled": true,
           "action": "move",
@@ -61,7 +61,7 @@
       "notes": "Cache to data drive, every minute. Files still being recorded are left until they are finished."
     },
     {
-      "id": "51d2c576",
+      "id": "91ebdd09",
       "name": "Move PGM1  T: > D:",
       "enabled": false,
       "path": "T:\\PGM1",
@@ -78,7 +78,7 @@
       "remove_empty_folders": false,
       "rules": [
         {
-          "id": "281b3dce",
+          "id": "31083bac",
           "name": "Move every file",
           "enabled": true,
           "action": "move",
@@ -103,7 +103,7 @@
       "notes": "Cache to data drive, every minute. Files still being recorded are left until they are finished."
     },
     {
-      "id": "c20f6a1d",
+      "id": "f23d67be",
       "name": "Producer cam sort  T: > D:",
       "enabled": false,
       "path": "T:\\Producer_Cam",
@@ -120,7 +120,7 @@
       "remove_empty_folders": false,
       "rules": [
         {
-          "id": "669a74f1",
+          "id": "a0da1c1b",
           "name": "Started 05:45-09:00: move to ISO",
           "enabled": true,
           "action": "move",
@@ -142,7 +142,7 @@
           "stamp_from_name": true
         },
         {
-          "id": "d5d2379e",
+          "id": "e959ad7e",
           "name": "Started outside the window: delete",
           "enabled": true,
           "action": "delete",
@@ -164,7 +164,7 @@
           "stamp_from_name": false
         },
         {
-          "id": "af936e13",
+          "id": "a604c016",
           "name": "Anything else: move to D:\\Producer_Cam",
           "enabled": true,
           "action": "move",
@@ -189,7 +189,7 @@
       "notes": "Every minute. Recordings started 05:45-09:00 move to D:\\ISO, other recordings are deleted, anything else moves to D:\\Producer_Cam, so the cache folder is emptied."
     },
     {
-      "id": "7ef81fb4",
+      "id": "1d5073d8",
       "name": "Retention D:\\ISO (7 days)",
       "enabled": false,
       "path": "D:\\ISO",
@@ -206,7 +206,7 @@
       "remove_empty_folders": false,
       "rules": [
         {
-          "id": "c9086512",
+          "id": "7bb316c9",
           "name": "Delete after 7 days",
           "enabled": true,
           "action": "delete",
@@ -231,7 +231,7 @@
       "notes": "Retention on the data drive. The cache drive needs none: the move policies empty it every minute."
     },
     {
-      "id": "95f021b3",
+      "id": "e055d168",
       "name": "Retention D:\\PGM1 (7 days)",
       "enabled": false,
       "path": "D:\\PGM1",
@@ -248,7 +248,7 @@
       "remove_empty_folders": false,
       "rules": [
         {
-          "id": "b770bdb6",
+          "id": "cca9873d",
           "name": "Delete after 7 days",
           "enabled": true,
           "action": "delete",
@@ -273,7 +273,7 @@
       "notes": "Retention on the data drive. The cache drive needs none: the move policies empty it every minute."
     },
     {
-      "id": "85ca9883",
+      "id": "6eea081c",
       "name": "Retention D:\\Vertical (7 days)",
       "enabled": false,
       "path": "D:\\Vertical",
@@ -290,7 +290,7 @@
       "remove_empty_folders": false,
       "rules": [
         {
-          "id": "ce8703cb",
+          "id": "fc0e7d4e",
           "name": "Delete after 7 days",
           "enabled": true,
           "action": "delete",
@@ -315,7 +315,7 @@
       "notes": "Retention on the data drive. The cache drive needs none: the move policies empty it every minute."
     },
     {
-      "id": "98191277",
+      "id": "e9485106",
       "name": "Retention D:\\Producer_Cam (7 days)",
       "enabled": false,
       "path": "D:\\Producer_Cam",
@@ -332,7 +332,7 @@
       "remove_empty_folders": false,
       "rules": [
         {
-          "id": "c169b3cb",
+          "id": "6bc17783",
           "name": "Delete after 7 days",
           "enabled": true,
           "action": "delete",
@@ -359,7 +359,7 @@
   ],
   "programs": [
     {
-      "id": "0b150a6a",
+      "id": "2284b8de",
       "name": "Virtual Video Director",
       "enabled": false,
       "kind": "program",
@@ -394,7 +394,7 @@
       "notes": ""
     },
     {
-      "id": "d0d69579",
+      "id": "8cdf7509",
       "name": "vMix",
       "enabled": false,
       "kind": "program",
@@ -496,7 +496,7 @@
     "devices": [],
     "vmix": [
       {
-        "id": "ef144f3c",
+        "id": "6a4fdc23",
         "name": "vMix (this server)",
         "host": "127.0.0.1",
         "port": 8088,

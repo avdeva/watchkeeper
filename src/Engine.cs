@@ -57,7 +57,7 @@ namespace Watchkeeper
 
     public class Engine
     {
-        public const string Version = "3.2.0";
+        public const string Version = "3.2.2";
 
         public readonly string DataDir;
         public readonly LogHub Hub;

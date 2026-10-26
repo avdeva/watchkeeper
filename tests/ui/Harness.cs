@@ -700,6 +700,10 @@ namespace Watchkeeper.UiTest
             Check(F<Label>(svc, "svcState").Text.StartsWith("Running"), "service page shows the running engine");
             Check(WaitFor(delegate { return F<Label>(svc, "cfgState").Text.StartsWith("In use by the service"); }, 8000), "service page confirms the file in use (" + F<Label>(svc, "cfgState").Text + ")");
             Shot("10-service");
+            Check(manager.Config.Versions().Count > 0, "earlier versions were kept by the saves so far (" + manager.Config.Versions().Count + ")");
+            ArmDialog("Close");
+            Btn(svc, "Earlier versions...").PerformClick();
+            Check(WaitFor(delegate { return dialogsHandled == 1; }, 5000) && dialogText.Contains("the settings as they were are kept here"), "Earlier versions... opens the list");
             F<CheckBox>(svc, "mGpio").Checked = false;
             Pump(200);
             Check(svc.Save(), "switch the GPIO part off");

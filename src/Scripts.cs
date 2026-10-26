@@ -438,7 +438,7 @@ namespace Watchkeeper
                             string rel = RelativeDir(folder, fi.DirectoryName);
                             SafeDir d = rel == null ? null : root.Descend(rel, false, keep);
                             if (d == null) refused = "it is not inside " + folder;
-                            else if (Util.IsWindows) SafeFs.OpenFile(d, fi.Name, 0, Native.ShareRead | Native.ShareWrite | Native.ShareDelete).Dispose();
+                            else if (Util.IsWindows) SafeFs.OpenFile(d, fi.Name, 0, Native.ShareRead | Native.ShareWrite | Native.ShareDelete, SafeFs.LinkUse.Read).Dispose();
                         }
                         catch (Exception ex) { refused = ex.Message; }
                         if (refused != null)

@@ -12,6 +12,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Security.AccessControl;
 using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Win32.SafeHandles;
@@ -250,10 +251,34 @@ namespace Watchkeeper
             return e != 2 && e != 3;          // not found / path not found
         }
 
-        /// <summary>Open a file inside a checked folder: not a link, a single name, really inside the folder.</summary>
+        /// <summary>What an operation does with a file that has more than one name (a hard link). A hard link can be
+        /// made by anyone who can write into the folder, to a file elsewhere on the same drive, so the file itself may be
+        /// one that account could not otherwise touch.</summary>
+        public enum LinkUse
+        {
+            /// <summary>Never accepted (files in the settings folder).</summary>
+            Strict,
+            /// <summary>Only this name is removed or renamed (delete, a move on the same drive): the file and its other
+            /// names are not touched, so a second name is harmless.</summary>
+            Name,
+            /// <summary>The content is read and copied elsewhere, or handed to a script: accepted when an account that is
+            /// not an administrator may read the file anyway (nothing is revealed that it could not read itself).</summary>
+            Read,
+            /// <summary>Date Modified is changed: accepted when an account that is not an administrator may change it anyway.</summary>
+            Attributes
+        }
+
+        /// <summary>Open a file inside a checked folder: not a link, really inside the folder, and a second name (hard
+        /// link) only when the use makes it harmless (see LinkUse).</summary>
         internal static SafeFileHandle OpenFile(SafeDir dir, string name, uint access, uint share)
         {
+            return OpenFile(dir, name, access, share, LinkUse.Strict);
+        }
+
+        internal static SafeFileHandle OpenFile(SafeDir dir, string name, uint access, uint share, LinkUse use)
+        {
             string path = dir.Combine(name);
+            if (use == LinkUse.Read || use == LinkUse.Attributes) access |= Native.ReadControl;
             SafeFileHandle h = Native.CreateFile(path, access | Native.FileReadAttributes | Native.Synchronize, share, IntPtr.Zero,
                                                  Native.OpenExisting, Native.FlagOpenReparsePoint, IntPtr.Zero);
             if (h.IsInvalid) throw new SafeFsException("cannot open " + path + ": " + Err());
@@ -262,14 +287,34 @@ namespace Watchkeeper
             string refuse = null;
             if ((info.Attributes & FileAttributeReparse) != 0) refuse = "is a link; links are never followed";
             else if ((info.Attributes & FileAttributeDirectory) != 0) refuse = "is a folder";
-            else if (info.Links > 1) refuse = "has more than one name (hard link); it is left alone";
             else
             {
                 string final = Native.FinalPathOf(h);
                 if (final == null || !Within(final, dir.Final)) refuse = "is not inside " + dir.Path;
+                else if (info.Links > 1) refuse = SecondName(h, use);
             }
             if (refuse != null) { h.Dispose(); throw new SafeFsException(path + " " + refuse); }
             return h;
+        }
+
+        /// <summary>Null when a file with more than one name may be used this way, otherwise why not.</summary>
+        static string SecondName(SafeFileHandle h, LinkUse use)
+        {
+            if (use == LinkUse.Name) return null;
+            if (use == LinkUse.Strict) return "has more than one name (hard link); it is left alone";
+            FileSystemRights mask = use == LinkUse.Read ? FileSystemRights.ReadData
+                                                        : FileSystemRights.WriteAttributes | FileSystemRights.WriteData;
+            string who;
+            try
+            {
+                FileSystemSecurity sec = Native.GetSecurity(h, false);
+                System.Security.Principal.SecurityIdentifier owner = Trust.Owner(sec);
+                who = owner != null && Trust.AdminState(owner) != 1 ? Trust.Name(owner) + " (owner)" : Trust.Untrusted(sec, mask, false);
+            }
+            catch (Exception ex) { return "has more than one name (hard link) and its permissions cannot be read (" + ex.Message + "); it is left alone"; }
+            if (who != null) return null;
+            return "has more than one name (hard link) and only administrators may " + (use == LinkUse.Read ? "read" : "change") + " it, so it may be a " +
+                   "protected file reached through a second name someone planted here; it is left alone";
         }
 
         static void CheckManagedFile(string path)
@@ -319,7 +364,7 @@ namespace Watchkeeper
                 File.Delete(p);
                 return;
             }
-            using (SafeFileHandle h = OpenFile(dir, name, Native.DeleteAccess, Native.ShareRead | Native.ShareWrite | Native.ShareDelete))
+            using (SafeFileHandle h = OpenFile(dir, name, Native.DeleteAccess, Native.ShareRead | Native.ShareWrite | Native.ShareDelete, LinkUse.Name))
                 DeleteByHandle(h, dir.Combine(name));
         }
 
@@ -375,7 +420,7 @@ namespace Watchkeeper
                 File.SetLastWriteTimeUtc(p, utc);
                 return;
             }
-            using (SafeFileHandle h = OpenFile(dir, name, 0x100 /* FILE_WRITE_ATTRIBUTES */, Native.ShareRead | Native.ShareWrite | Native.ShareDelete))
+            using (SafeFileHandle h = OpenFile(dir, name, 0x100 /* FILE_WRITE_ATTRIBUTES */, Native.ShareRead | Native.ShareWrite | Native.ShareDelete, LinkUse.Attributes))
                 SetWritten(h, utc.ToFileTimeUtc());
         }
 
@@ -405,7 +450,7 @@ namespace Watchkeeper
                 return;
             }
             DeleteEntry(dst, tmpName);
-            using (SafeFileHandle sh = OpenFile(src, name, GenericRead, Native.ShareRead | Native.ShareWrite))
+            using (SafeFileHandle sh = OpenFile(src, name, GenericRead, Native.ShareRead | Native.ShareWrite, LinkUse.Read))
             {
                 SafeFileHandle th = Native.CreateFile(dst.Combine(tmpName), GenericWrite | GenericRead | Native.DeleteAccess, Native.ShareRead, IntPtr.Zero,
                                                       CreateNew, Native.FlagOpenReparsePoint, IntPtr.Zero);
@@ -501,7 +546,7 @@ namespace Watchkeeper
                 File.Delete(from);
                 return;
             }
-            using (SafeFileHandle h = OpenFile(src, name, Native.DeleteAccess, Native.ShareRead | Native.ShareWrite))
+            using (SafeFileHandle h = OpenFile(src, name, Native.DeleteAccess, Native.ShareRead | Native.ShareWrite, LinkUse.Name))
             {
                 if (SameVolume(src.Final, dst.Final))
                 {

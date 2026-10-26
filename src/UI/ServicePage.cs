@@ -78,7 +78,10 @@ namespace Watchkeeper.UI
             g.Row(null, cfgState);
             g.Row(null, Ui.Flow(Ui.Btn("Export a copy...", delegate { Export(); }), Ui.Btn("Export for another server...", delegate { ExportTemplate(); }),
                                 Ui.Btn("Import...", delegate { Import(); })));
-            g.Row(null, Ui.Flow(Ui.Btn("Open folder", delegate { OpenFolder(); }), Ui.Btn("Open in Notepad", delegate { OpenNotepad(); })));
+            g.Row(null, Ui.Flow(Ui.Btn("Open folder", delegate { OpenFolder(); }), Ui.Btn("Open in Notepad", delegate { OpenNotepad(); }),
+                                Ui.Btn("Earlier versions...", delegate { Versions(); })));
+            g.Note("Before every save the settings as they were are kept as a version (the newest " + M.Config.KeepVersions + ", and config.json.bak); " +
+                   "Earlier versions... shows them and restores one.");
             g.Note("Every page saves into this one file. The service reads it at start and applies changes within a few seconds. A file with mistakes is rejected and the previous settings stay in force.");
             g.Note("Another server: \"Export for another server\" leaves out passwords and the server name. Put the file next to Watchkeeper.exe and deploy.cmd on that server " +
                    "and run deploy.cmd as administrator (Watchkeeper.exe --deploy --config <file>): it installs the service with that configuration.");
@@ -212,7 +215,7 @@ namespace Watchkeeper.UI
                 string what = runs.Count > 0 ? "\n\nWhen switched on it runs:\n" + string.Join("\n", runs.ToArray()) : "";
                 if (untrusted.Count > 0) what += "\n\nWARNING: " + untrusted.Count + " of these are in a folder other accounts can change; the service will not run them until they are protected.";
                 if (!Ui.Confirm(FindForm(), "Replace ALL current settings with the ones in\n" + d.FileName + "?\n\n" + summary + "." + what +
-                                            "\n\nA configuration decides what runs as Local System: import only files you trust. The current file is kept as config.json.bak.")) return;
+                                            "\n\nA configuration decides what runs as Local System: import only files you trust. The current settings are kept as a version first (Earlier versions...).")) return;
                 List<string> errors = M.Config.SaveAll(c);
                 if (errors.Count > 0)
                 {
@@ -221,6 +224,11 @@ namespace Watchkeeper.UI
                 }
                 Ui.Info(FindForm(), "Imported. The service applies the new settings within a few seconds.");
             }
+        }
+
+        void Versions()
+        {
+            using (VersionsDialog d = new VersionsDialog(M)) d.ShowDialog(FindForm());
         }
 
         void OpenFolder()
