@@ -63,7 +63,7 @@ namespace Watchkeeper
         public bool Enabled = true;
         /// <summary>True: every alert. False: only the parts (and entries) below.</summary>
         public bool AllParts = true;
-        public List<string> Parts = new List<string>();        // folders | programs | scripts | vertical | gpio | config | service
+        public List<string> Parts = new List<string>();        // folders | programs | scripts | vertical | gpio | studios | config | service
         /// <summary>Only these entries ("folder:id", "program:id", "script:id", "gpio:deviceId", "gpio-trigger:id"); empty = all entries of the parts.</summary>
         public List<string> Items = new List<string>();
         public string MinSeverity = "warning";                 // info | warning | error
@@ -86,7 +86,7 @@ namespace Watchkeeper
 
     public static class AlertSettings
     {
-        public static readonly string[] Parts = { "folders", "programs", "scripts", "vertical", "gpio", "config", "service" };
+        public static readonly string[] Parts = { "folders", "programs", "scripts", "vertical", "gpio", "studios", "config", "service" };
         public static readonly string[] Severities = { "info", "warning", "error" };
 
         public static string PartLabel(string part)
@@ -98,6 +98,7 @@ namespace Watchkeeper
                 case "scripts": return "Scripts";
                 case "vertical": return "Vertical conversion";
                 case "gpio": return "GPIO";
+                case "studios": return "Studios";
                 case "config": return "Configuration file";
                 case "service": return "Service start";
             }

@@ -93,6 +93,7 @@ namespace Watchkeeper.UI
             Add("scripts", "Scripts", new ScriptsPage(m), true);
             Add("vertical", "Vertical conversion", new VerticalPage(m), true);
             Add("gpio", "GPIO (Axia)", new GpioPage(m), true);
+            Add("studios", "Studios", new StudiosPage(m), true);
             Add("alerts", "Alerts", new AlertsPage(m), false);
             Add("service", "Service & settings", new ServicePage(m), true);
             Add("log", "Log", new LogPage(m), true);
@@ -123,6 +124,7 @@ namespace Watchkeeper.UI
                 case "scripts": return mo.Scripts;
                 case "vertical": return mo.Vertical;
                 case "gpio": return mo.Gpio;
+                case "studios": return mo.Studios;
             }
             return true;
         }
@@ -131,7 +133,7 @@ namespace Watchkeeper.UI
         void ApplyModules(bool initial)
         {
             ModulesCfg mo = m.Config.Get().General.Modules;
-            string sig = "" + mo.Folders + mo.Programs + mo.Scripts + mo.Vertical + mo.Gpio;
+            string sig = "" + mo.Folders + mo.Programs + mo.Scripts + mo.Vertical + mo.Gpio + mo.Studios;
             if (!initial && sig == modulesSig) return;
             modulesSig = sig;
             string curKey = current >= 0 && current < items.Count ? items[current].Key : null;
@@ -363,6 +365,15 @@ namespace Watchkeeper.UI
                                 else if (g.Devices.Exists(delegate(GpioDeviceStatus d) { return d.State == "error"; })) c = Ui.Bad;
                                 else if (g.Events.Count > 0 && g.Events[0].Result.Contains("failed")) c = Ui.Warn;
                                 else if (g.Devices.Exists(delegate(GpioDeviceStatus d) { return d.State == "connected"; })) c = Ui.Ok;
+                                else c = Ui.Warn;
+                                break;
+                            }
+                        case "studios":
+                            {
+                                StudioStatus st = s.Studios;
+                                if (st == null || !st.On) c = Ui.Off;
+                                else if (st.State == "error" || st.PathfinderState == "error" || st.GpioState == "error") c = Ui.Bad;
+                                else if (st.State == "ok") c = Ui.Ok;
                                 else c = Ui.Warn;
                                 break;
                             }

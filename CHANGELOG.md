@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.2.0
+New part **Studios**: switching a server between studio configurations, decided by Pathfinder.
+- Studios with codes; watchdog entries belong to one or more studios (untagged entries run in every studio). While a studio is active only its programs (and untagged ones) run.
+- Switch: the old studio's programs are asked to close (taskkill without /F in the signed-in session), ended after a time-out, then the new studio's programs start at once. The active studio is kept across restarts. Minimum time between switches asked for by Pathfinder or GPIO (default 30 s). Alerts for every switch (part *Studios*, kinds `studio_switch` and `studio_problem`).
+- Status to Pathfinder Core PRO over SapV2 (TCP 9600, or 9602 with TLS and certificate pinning): heartbeat counter, status (`ok`, `degraded`, `switching`, `error`) and active studio in memory slots. The studio to run is read from a memory slot (desired state). The connection is made by Watchkeeper; nothing new listens on the server.
+- Status as GPIO pins on an Axia device (usually the IP-Audio driver): heartbeat pin, OK pin, one pin per studio.
+- GPIO action **Switch this server to a studio**.
+- Manager: Studios page (studios, Pathfinder link with Test connection, GPIO status pins, live state, Switch now); studios on the Watchdog page.
+- Configuration: new section `studios`, `general.modules.studios`, `programs[].studios`, GPIO action type `studio`. Still version 4; older versions of Watchkeeper ignore the new keys.
+
 ## 3.1.1 (security release)
 Fixes found in a second security review of 3.1.0. Upgrading is recommended for every installation.
 

@@ -715,6 +715,85 @@ namespace Watchkeeper.UiTest
             Pump(800);
             Check(navList.Items.Count == 9, "page back (" + navList.Items.Count + ")");
 
+            // ---- studios and Pathfinder
+            FakePathfinder pf = new FakePathfinder();
+            F<CheckBox>(svc, "mStudios").Checked = true;
+            Pump(200);
+            Check(svc.Save(), "switch the Studios part on");
+            Pump(800);
+            Check(navList.Items.Count == 10, "the Studios page appears (" + navList.Items.Count + ")");
+            StudiosPage stp = (StudiosPage)Go("studios");
+            Btn(stp, "Add studio").PerformClick();
+            Pump(200);
+            F<NumericUpDown>(stp, "sPin").Value = 4;
+            Btn(stp, "Add studio").PerformClick();
+            Pump(200);
+            F<NumericUpDown>(stp, "sPin").Value = 5;
+            TabControl stabs = F<TabControl>(stp, "tabs");
+            stabs.SelectedIndex = 1;
+            Pump(300);
+            F<CheckBox>(stp, "pOn").Checked = true;
+            F<TextBox>(stp, "pHost").Text = "127.0.0.1";
+            F<NumericUpDown>(stp, "pPort").Value = pf.Port;
+            F<TextBox>(stp, "pUser").Text = pf.User;
+            F<TextBox>(stp, "pPassword").Text = pf.Password;
+            F<TextBox>(stp, "pBeat").Text = "SRV1_Heartbeat";
+            F<TextBox>(stp, "pStatus").Text = "SRV1_Status";
+            F<TextBox>(stp, "pStudio").Text = "SRV1_Studio";
+            F<TextBox>(stp, "pCommand").Text = "SRV1_Command";
+            Pump(200);
+            Check(stp.Dirty && stp.Save(), "studios and the Pathfinder link saved");
+            StudiosCfg savedS = manager.Config.Get().Studios;
+            Check(savedS.Studios.Count == 2 && savedS.Studios[0].Code == "S1" && savedS.Studios[1].Code == "S2" && savedS.Pathfinder.Enabled &&
+                  savedS.GpioStatus.StudioPins.Count == 2 && Secrets.IsEncrypted(savedS.Pathfinder.Password) == Util.IsWindows,
+                  "saved: two studios, their GPIO pins and the link");
+            pf.SetSlot("SRV1_Command", "");
+            ArmDialog("");
+            Btn(stp, "Test connection").PerformClick();
+            Check(WaitFor(delegate { return dialogsHandled == 1; }, 15000) && dialogText.Contains("Logged in."),
+                  "Test connection logs in to Pathfinder (" + F<Label>(stp, "pResult").Text + ")");
+            Check(WaitFor(delegate { return pf.Slot("SRV1_Status") != null && pf.Slot("SRV1_Studio") == "none"; }, 15000),
+                  "the service reports to Pathfinder (studio " + pf.Slot("SRV1_Studio") + ", status " + pf.Slot("SRV1_Status") + ")");
+            // tag the starter programs: VVD in studio 1, vMix in studio 2
+            ProgramsPage pp2 = (ProgramsPage)Go("programs");
+            ListEditor<ProgramJob> plist = F<ListEditor<ProgramJob>>(pp2, "list");
+            CheckedListBox pst = F<CheckedListBox>(pp2, "pStudios");
+            Check(pst.Visible && pst.Items.Count == 2, "the Watchdog page offers the studios (" + pst.Items.Count + ")");
+            plist.Select(plist.Items[0]);
+            Pump(200);
+            pst.SetItemChecked(0, true);
+            Pump(300);
+            plist.Select(plist.Items[1]);
+            Pump(200);
+            pst.SetItemChecked(1, true);
+            Pump(300);
+            Check(pp2.Dirty && pp2.Save(), "studios ticked on the programs saved");
+            List<ProgramJob> savedP = manager.Config.Get().Programs;
+            Check(savedP[0].Studios.Count == 1 && savedP[0].Studios[0] == savedS.Studios[0].Id && savedP[1].Studios[0] == savedS.Studios[1].Id, "each program belongs to its studio");
+            // Pathfinder decides
+            pf.SetSlot("SRV1_Command", "S2");
+            Check(WaitFor(delegate { EngineStatus s = Status(); return s != null && s.Studios.ActiveCode == "S2" && s.Studios.State != "switching"; }, 15000),
+                  "Pathfinder's command slot switches the server to studio 2");
+            Check(WaitFor(delegate { return pf.Slot("SRV1_Studio") == "S2"; }, 10000), "and the new studio is reported back");
+            stp = (StudiosPage)Go("studios");
+            Pump(1500);
+            Check(F<Label>(stp, "nowState").Text.StartsWith("Studio 2 (S2)") && F<Label>(stp, "nowLink").Text.Contains("Studio to run: S2"),
+                  "the Studios page shows the active studio and the link (" + F<Label>(stp, "nowState").Text + " / " + F<Label>(stp, "nowLink").Text + ")");
+            Shot("18-studios");
+            stabs.SelectedIndex = 1;
+            Pump(400);
+            Shot("19-studios-pathfinder");
+            stabs.SelectedIndex = 0;
+            pf.SetSlot("SRV1_Command", "");
+            Pump(2500);
+            ComboBox swTo = F<ComboBox>(stp, "switchTo");
+            Ui.Set(swTo, savedS.Studios[0].Id);
+            ArmDialog("Yes");
+            Btn(stp, "Switch now").PerformClick();
+            Check(WaitFor(delegate { return dialogsHandled == 1; }, 4000), "a manual switch asks first");
+            Check(WaitFor(delegate { EngineStatus s = Status(); return s != null && s.Studios.ActiveCode == "S1"; }, 45000), "Switch now switches to studio 1 (" + F<Label>(stp, "switchResult").Text + " / active " + (Status() != null ? Status().Studios.ActiveCode : "?") + " / chosen " + Ui.Get(swTo) + ")");
+            pf.Dispose();
+
             // ---- external edit of the file
             AppConfig edited = manager.Config.Get();
             edited.Folders[1].Name = "PGM1 edited in Notepad";

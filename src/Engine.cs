@@ -44,6 +44,7 @@ namespace Watchkeeper
         public List<ProgramStatus> Programs = new List<ProgramStatus>();
         public ConverterStatus Vertical = new ConverterStatus();
         public GpioStatus Gpio = new GpioStatus();
+        public StudioStatus Studios = new StudioStatus();
         public List<AlertRecord> Alerts = new List<AlertRecord>();
     }
 
@@ -56,7 +57,7 @@ namespace Watchkeeper
 
     public class Engine
     {
-        public const string Version = "3.1.1";
+        public const string Version = "3.2.0";
 
         public readonly string DataDir;
         public readonly LogHub Hub;
@@ -71,6 +72,7 @@ namespace Watchkeeper
         public readonly Supervisor Programs;
         public readonly FileTriggers Triggers;
         public readonly GpioService Gpio;
+        public readonly StudioManager Studios;
         public readonly ControlServer Control;
         public readonly string Mode;
         readonly SourceLogger log;
@@ -113,6 +115,11 @@ namespace Watchkeeper
             Triggers.Alert = Alerts.Raise;
             Gpio = new GpioService(Config.Get, Hub);
             Gpio.Alert = Alerts.Raise;
+            Studios = new StudioManager(Config.Get, Programs, Gpio, Hub, StateDir);
+            Studios.Alert = Alerts.Raise;
+            Studios.GlobalDryRun = delegate { return Config.Get().General.DryRun; };
+            Programs.InStudio = Studios.InStudio;
+            GpioService.StudioSwitch = Studios.SwitchFromGpio;
             if (o.StartControl)
             {
                 Control = new ControlServer(o.PipeName ?? ControlChannel.PipeName(DataDir), Handle, Hub.Logger("service"));
@@ -228,9 +235,11 @@ namespace Watchkeeper
                 }
             }
             Jobs.Start();
+            Studios.Load();
             Programs.Start();
             Triggers.Start();
             Gpio.Start();
+            Studios.Start();
             ApplyVertical();
             watcher = new Thread(WatchConfig);
             watcher.Name = "config-watch";
@@ -283,6 +292,7 @@ namespace Watchkeeper
             stop.Set();
             if (Control != null) Control.Stop();
             Triggers.Stop();
+            Studios.Stop();
             Gpio.Stop();
             Programs.Stop();
             Jobs.Stop();
@@ -360,6 +370,7 @@ namespace Watchkeeper
             s.Programs = Programs.Snapshot();
             s.Vertical = Vertical.Status();
             s.Gpio = Gpio.Status();
+            s.Studios = Studios.Status();
             s.Alerts = Alerts.Recent();
             if (s.Alerts.Count > 30) s.Alerts.RemoveRange(30, s.Alerts.Count - 30);
             return s;
@@ -526,6 +537,26 @@ namespace Watchkeeper
                         one.Devices.Add(d);
                         Cfg.NormalizeGpio(one);
                         return Ok("lines", GpioService.Probe(one.Devices[0], (int)req.Num("listen", 3000)));
+                    }
+                case "studios.switch":
+                    {
+                        ActionResult r = Studios.RequestSwitch(req.Str("studio", ""), "the manager", true);
+                        if (r.Ok) log.Info("Studio switch asked for in the manager: " + r.Text);
+                        JObject o = Ok(null, null);
+                        o.Set("ok", r.Ok);
+                        o.Set("text", r.Text);
+                        return o;
+                    }
+                case "studios.test":
+                    {
+                        PathfinderCfg p = req.As<PathfinderCfg>("pathfinder");
+                        if (p == null) throw new InvalidOperationException("no Pathfinder settings in the request");
+                        PathfinderCfg saved = Config.Get().Studios.Pathfinder;
+                        p.Password = Kept(p.Password, saved.Password, "pathfinder");
+                        StudiosCfg one = new StudiosCfg();
+                        one.Pathfinder = p;
+                        StudioSettings.Normalize(one);
+                        return Ok("trace", StudioManager.TestPathfinder(one.Pathfinder));
                     }
                 case "health.test":
                     {

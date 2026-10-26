@@ -16,6 +16,7 @@ Watchkeeper started as the housekeeping service for a broadcast studio (recordin
 | **Scripts** | Any `.ps1` / `.bat` / `.cmd` / `.vbs` / `.exe` on a schedule, at service start, or once for every new file in a folder. |
 | **Vertical conversion** | Portrait versions of recordings with ffmpeg on the GPU (Intel Quick Sync, NVIDIA NVENC, AMD AMF) or CPU. |
 | **GPIO (Axia)** | Axia Livewire GPIO pins and command messages to vMix functions or any HTTP request. |
+| **Studios** | Studio configurations (which vMix, VVD... with which settings) a server can switch between. Reports a heartbeat, its status and the active studio to Pathfinder Core PRO (memory slots) and/or as GPIO pins, and switches studio when Pathfinder says so: failover between studio servers, decided by Pathfinder. |
 | **Alerts** | Rule-based routing to the Windows Event Log, email (SMTP), webhooks (Teams, Slack, Discord, Google Chat, Jira Automation, custom JSON) and Jira issues. "Back to normal" messages when a problem clears. |
 
 Requirements: Windows 10/11 or Windows Server 2016+ (.NET Framework 4.6 or later, included). Administrator rights to install the service.
@@ -30,6 +31,7 @@ Requirements: Windows 10/11 or Windows Server 2016+ (.NET Framework 4.6 or later
 - [Scripts](#scripts)
 - [Vertical conversion](#vertical-conversion)
 - [GPIO (Axia to vMix)](#gpio-axia-to-vmix)
+- [Studios and Pathfinder failover](#studios-and-pathfinder-failover)
 - [Command line](#command-line)
 - [Configuration file](#configuration-file)
 - [Security](#security)
@@ -146,6 +148,23 @@ The service connects to each Axia device (GPIO node, xNode, console engine, or a
 - **Live**: every port's pins, recent changes and their results, and *Simulate* to test a trigger without hardware.
 - The state reported right after connecting only sets the pins; a reconnect never fires a trigger on its own.
 
+## Studios and Pathfinder failover
+A server can run the programs of different studios: for example vMix with `Studio1.vmix` and VVD with the Studio 1 profile, or the same programs with the Studio 2 settings. Pathfinder decides which studio each server runs; Watchkeeper reports back and switches when told. It never fails over on its own.
+
+**Set up on each server** (Service & settings: switch on **Studios**):
+1. **Studios** page, *Studios* tab: add each studio with a short code (`S1`, `S2`: what Pathfinder sends).
+2. **Watchdog** page: add one entry per program and studio (e.g. *vMix - Studio 1* with `Studio1.vmix`, *vMix - Studio 2* with `Studio2.vmix`) and tick the studio it belongs to. Untagged entries run in every studio.
+3. Choose how Pathfinder hears from the server, either or both:
+   - **Pathfinder** tab (SapV2, Pathfinder Core PRO port 9600, or 9602 with TLS): a Pathfinder user, and the names of four memory slots: *heartbeat* (a counter written every interval), *status* (`ok`, `degraded`, `switching`, `error`), *active studio* (its code, `none` or `switching`) and *studio to run* (read every interval: the code of the studio Pathfinder wants on this server, or `none`; empty = no instruction). Create the slots in Pathfinder first; **Test connection** reads them. The connection is made by Watchkeeper; nothing listens on the server.
+   - **GPIO status** tab: pins on an Axia device, normally the IP-Audio driver on this server (add it on the GPIO page, `127.0.0.1` port 93): a heartbeat pin that changes every interval, an OK pin (low while every program of the active studio runs and answers) and a pin per studio (low while that studio is active).
+4. Commands from Pathfinder: the *studio to run* memory slot, or a GPIO trigger (pin or GPO command message) with the action **Switch this server to a studio**.
+
+**A switch**: the old studio's programs are asked to close as if their window were closed, ended after the time-out (default 20 s), then the new studio's programs start at once and the new studio is reported. Switches asked for by Pathfinder or GPIO are at least 30 s apart (setting); an operator can switch on the Studios page at any time. The active studio is kept across restarts. Every switch raises an alert (part *Studios*).
+
+**In Pathfinder** (your logic, not part of Watchkeeper): a Logic Flow per server that restarts a timer whenever its heartbeat slot (or pin) changes; when the timer runs out, write the failed server's studio code into the other server's *studio to run* slot, and show the slots on the studio displays. When the failed server is back, write its studio back where it belongs. Because the slot holds the desired studio rather than a one-off command, a server that restarts picks up what Pathfinder wants.
+
+The SapV2 commands used: `Login <user> <password>`, `set MemorySlots#0.MemorySlot#<name> SlotValue="<value>"`, `get MemorySlots#0.MemorySlot#<name> SlotValue`. The GPIO lines: `LOGIN [password]` then `GPI <port> <pins>` (`l` = low = on, `h` = high, `x` = left alone).
+
 ## Command line
 ```
 Watchkeeper.exe                         manager window
@@ -161,7 +180,7 @@ Watchkeeper.exe --service               used by Windows to run the service
 ```
 
 ## Configuration file
-snake_case JSON (version 4) with sections `general` (including `modules`, the parts in use), `folders`, `programs`, `scripts`, `vertical`, `gpio` and `alerts` (`destinations`, `rules`). A part that is switched off is not validated. Hand edits are allowed; out-of-range values are clamped and unknown keys ignored. Check an edited file with `--validate`, or use Service & settings > Import, which validates first. Version 2 and 3 files are converted on load; plain-text passwords typed into the file are encrypted by the service when it next reads it.
+snake_case JSON (version 4) with sections `general` (including `modules`, the parts in use), `folders`, `programs`, `scripts`, `vertical`, `gpio`, `studios` and `alerts` (`destinations`, `rules`). A part that is switched off is not validated. Hand edits are allowed; out-of-range values are clamped and unknown keys ignored. Check an edited file with `--validate`, or use Service & settings > Import, which validates first. Version 2 and 3 files are converted on load; plain-text passwords typed into the file are encrypted by the service when it next reads it.
 
 ## Security
 Watchkeeper runs as Local System and acts on folders, programs and network services that other accounts can reach, so it is built to keep a standard user, a crafted file name or a network attacker from using it to gain those rights. Report vulnerabilities as described in [SECURITY.md](SECURITY.md).
@@ -172,6 +191,7 @@ Watchkeeper runs as Local System and acts on folders, programs and network servi
 - **Files in shared folders.** Folder policies, the vertical conversion and new-file triggers never follow links and never delete, overwrite, create or hand on files through them; the folders worked in are held open so they cannot be swapped meanwhile. File names never reach a command line unquoted, and never reach cmd.exe at all.
 - **Secrets.** Encrypted with the service's own key, never sent between the manager and the service (references are sent instead), removed from exports, and kept out of the log, traces and the Event Log.
 - **Control channel.** The local pipe between manager and service is created so another program cannot take its name, and the manager checks that the other end is the Watchkeeper service before it sends anything. Requests are limited in size and nesting.
+- **Studios.** A command from Pathfinder or GPIO can only choose one of the studios set up on the server; it cannot start anything else. The Pathfinder login goes over TLS (port 9602, certificate checked or pinned by fingerprint) or, on port 9600, only when "Send the login unencrypted" is ticked. Watchkeeper connects out to Pathfinder; nothing new listens on the server.
 - **Network.** TLS 1.2 with revocation checks, `https://` for webhooks and Jira, no login over unencrypted email connections, no login over plain `http://` to another computer unless allowed per entry (vMix only offers http), no redirects, no Windows login sent to proxies unless allowed. Alert text is escaped per format; addresses in chat alerts cannot be clicked.
 - **Watchdog.** Programs go only to the console session or the auto-logon user's session, never to another Remote Desktop session; elevation without the consent prompt needs **Allow elevated start**; restarts end only processes of the configured file.
 - **Releases.** Built on GitHub Actions with pinned actions, published with `SHA256SUMS` and build provenance (`gh attestation verify Watchkeeper.exe --repo <owner>/<repo>`); signed when a code-signing certificate is configured.
@@ -187,7 +207,7 @@ C# 5, .NET Framework 4.x, Windows Forms. No NuGet packages.
 - `build-uitest.sh`: drives the real manager window against the real engine over the pipe (needs Xvfb, see the script).
 
 ## Status
-Developed and tested on Linux with Mono. The Windows-only security code (file permissions, link handling, the control channel, reduced tokens, LOCAL SERVICE for ffmpeg, service installation) is exercised by the Windows job in GitHub Actions; that job has not yet been run at the time of the 3.1.1 source release. Not exercised automatically: `deploy.cmd` and `deploy-remote.ps1`, starting programs in a signed-in session, real GPU encodes inside a service, high-DPI rendering. GPIO was tested against a simulated LWRP device built from the published protocol, Jira against a local imitation of its REST API, email against local SMTP servers, webhooks against a local HTTP listener. Reports and pull requests are welcome.
+Developed and tested on Linux with Mono. The Pathfinder link was tested against a local imitation of Pathfinder Core PRO's SapV2 protocol built from its published documentation, not against a real Pathfinder; check it with **Test connection** before relying on it. The Windows-only security code (file permissions, link handling, the control channel, reduced tokens, LOCAL SERVICE for ffmpeg, service installation) is exercised by the Windows job in GitHub Actions; that job has not yet been run at the time of the 3.2.0 source release. Not exercised automatically: `deploy.cmd` and `deploy-remote.ps1`, starting programs in a signed-in session, real GPU encodes inside a service, high-DPI rendering. GPIO was tested against a simulated LWRP device built from the published protocol, Jira against a local imitation of its REST API, email against local SMTP servers, webhooks against a local HTTP listener. Reports and pull requests are welcome.
 
 ## License
 [MIT](LICENSE)

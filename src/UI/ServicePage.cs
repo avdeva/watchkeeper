@@ -31,6 +31,7 @@ namespace Watchkeeper.UI
         readonly CheckBox mScripts = Ui.Chk("Scripts");
         readonly CheckBox mVertical = Ui.Chk("Vertical conversion (needs ffmpeg)");
         readonly CheckBox mGpio = Ui.Chk("GPIO: Axia to vMix / HTTP");
+        readonly CheckBox mStudios = Ui.Chk("Studios: switch studio configurations on Pathfinder's instruction, report status to Pathfinder");
         bool busy;
 
         public ServicePage(Manager m)
@@ -83,7 +84,7 @@ namespace Watchkeeper.UI
                    "and run deploy.cmd as administrator (Watchkeeper.exe --deploy --config <file>): it installs the service with that configuration.");
 
             g.Header("Parts used on this server");
-            foreach (CheckBox c in new[] { mFolders, mPrograms, mScripts, mVertical, mGpio }) g.Row(null, c);
+            foreach (CheckBox c in new[] { mFolders, mPrograms, mScripts, mVertical, mGpio, mStudios }) g.Row(null, c);
             g.Note("A part that is off is hidden here and nothing in it runs. Alerts, the log and this page are always there. Saved with the settings below.");
 
             g.Header("Settings");
@@ -305,6 +306,7 @@ namespace Watchkeeper.UI
             mScripts.Checked = g.Modules.Scripts;
             mVertical.Checked = g.Modules.Vertical;
             mGpio.Checked = g.Modules.Gpio;
+            mStudios.Checked = g.Modules.Studios;
         }
 
         protected override void Collect(AppConfig c)
@@ -321,6 +323,7 @@ namespace Watchkeeper.UI
             g.Modules.Scripts = mScripts.Checked;
             g.Modules.Vertical = mVertical.Checked;
             g.Modules.Gpio = mGpio.Checked;
+            g.Modules.Studios = mStudios.Checked;
         }
 
         public override void Tick()

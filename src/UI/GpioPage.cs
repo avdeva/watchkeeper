@@ -33,19 +33,26 @@ namespace Watchkeeper.UI
         readonly NumericUpDown aDelay = Ui.Num(0, 60000, 100, 0);
         readonly Button runBtn;
         readonly Label runResult = new Label();
-        readonly List<Control> vmixRows = new List<Control>(), httpRows = new List<Control>();
+        readonly ComboBox aStudio = new ComboBox();
+        readonly List<Control> vmixRows = new List<Control>(), httpRows = new List<Control>(), studioRows = new List<Control>();
         int fill;
 
         public event EventHandler Changed;
         public event EventHandler RunRequested;
         public Func<List<VmixTarget>> Targets = delegate { return new List<VmixTarget>(); };
         public Func<string, List<VmixInput>> Inputs = delegate { return null; };
+        /// <summary>The studios to offer for "switch studio" (Studios part; empty when it is off).</summary>
+        public Func<List<StudioDef>> Studios = delegate { return new List<StudioDef>(); };
 
         public ActionEditor(string runText)
         {
             Dock = DockStyle.Fill;
             Tag = "nodirty";        // edits are reported through Changed (the page's own change tracking skips this panel)
-            aType = Ui.Combo(new Choice("vmix", "vMix function"), new Choice("http", "HTTP request (any REST API)"));
+            aType = Ui.Combo(new Choice("vmix", "vMix function"), new Choice("http", "HTTP request (any REST API)"),
+                             new Choice("studio", "Switch this server to a studio (Studios)"));
+            aStudio.DropDownStyle = ComboBoxStyle.DropDownList;
+            aStudio.Width = 300;
+            aStudio.Anchor = AnchorStyles.Left;
             aMethod = Ui.Combo(new Choice("GET", "GET"), new Choice("POST", "POST"), new Choice("PUT", "PUT"), new Choice("DELETE", "DELETE"));
             aVmix.DropDownStyle = ComboBoxStyle.DropDownList;
             aVmix.Width = 260;
@@ -112,6 +119,8 @@ namespace Watchkeeper.UI
             Row(g, httpRows, "User name", aUser, "Only if the address needs a login (HTTP basic). Never put a user name or password in the address.");
             Row(g, httpRows, "Password", aPassword, "Stored encrypted. Leave the dots to keep the saved password.");
             Row(g, httpRows, null, aPlain, "Without this, a login is only sent over https or to this server itself.");
+            Row(g, studioRows, "Studio", aStudio, "Closes the programs of the current studio and starts those of this one (Studios page). " +
+                                                  "Pathfinder can also choose the studio through a memory slot instead.");
             Label ms2 = Ui.Lbl("ms before this action");
             g.Row("Wait", Ui.Flow(aDelay, ms2));
             g.Row(null, Ui.Flow(runBtn, runResult));
@@ -142,6 +151,7 @@ namespace Watchkeeper.UI
             aPlain.CheckedChanged += apply;
             aPassword.UseSystemPasswordChar = true;
             aDelay.ValueChanged += apply;
+            aStudio.SelectedIndexChanged += apply;
         }
 
         static void Row(FormGrid g, List<Control> group, string label, Control c, string hint)
@@ -154,6 +164,7 @@ namespace Watchkeeper.UI
         public static string Title(GpioAction a)
         {
             if (a.Type == "http") return a.Method + " " + (a.Url.Length > 0 ? a.Url : "(no address)");
+            if (a.Type == "studio") return "Switch studio" + (a.Studio.Length > 0 ? "" : " (none chosen)");
             return (a.Function.Length > 0 ? a.Function : "(no function)") + (a.Input.Length > 0 ? "  " + a.Input : "");
         }
 
@@ -167,7 +178,7 @@ namespace Watchkeeper.UI
                 if (a.SelectedName.Length > 0) p.Add(a.SelectedName);
                 if (a.Duration.Length > 0) p.Add(a.Duration + " ms");
             }
-            return p.Count > 0 ? string.Join(", ", p.ToArray()) : (a.Type == "vmix" ? "vMix" : "HTTP");
+            return p.Count > 0 ? string.Join(", ", p.ToArray()) : (a.Type == "vmix" ? "vMix" : a.Type == "studio" ? "Studios" : "HTTP");
         }
 
         public void SetItems(List<GpioAction> items)
@@ -214,9 +225,10 @@ namespace Watchkeeper.UI
 
         void UpdateVisible()
         {
-            bool vmix = Ui.Get(aType) != "http";
-            foreach (Control c in vmixRows) c.Visible = vmix;
-            foreach (Control c in httpRows) c.Visible = !vmix;
+            string type = Ui.Get(aType);
+            foreach (Control c in vmixRows) c.Visible = type == "vmix";
+            foreach (Control c in httpRows) c.Visible = type == "http";
+            foreach (Control c in studioRows) c.Visible = type == "studio";
             aHint.Text = Vmix.Hint(aFunc.Text);
         }
 
@@ -229,6 +241,11 @@ namespace Watchkeeper.UI
                 GpioAction d = a ?? new GpioAction();
                 Ui.Set(aType, d.Type);
                 RefreshTargetsQuiet(d.VmixId);
+                aStudio.Items.Clear();
+                aStudio.Items.Add(new Choice(StudioSettings.None, "No studio (close the studio programs)"));
+                foreach (StudioDef sd in Studios()) aStudio.Items.Add(new Choice(sd.Id, sd.Name + "  (" + sd.Code + ")"));
+                if (d.Studio.Length > 0) Ui.Set(aStudio, d.Studio);
+                if (aStudio.SelectedIndex < 0 && aStudio.Items.Count > 1) aStudio.SelectedIndex = 1;
                 aFunc.Text = d.Function;
                 aInput.Text = d.Input;
                 aValue.Text = d.Value;
@@ -282,6 +299,7 @@ namespace Watchkeeper.UI
             if (a.User.Length == 0) a.Password = "";
             else if (aPassword.Text != GpioPage.Unchanged) a.Password = aPassword.Text.Length > 0 ? "plain:" + aPassword.Text : "";
             a.DelayMs = (int)aDelay.Value;
+            if (a.Type == "studio") a.Studio = Ui.Get(aStudio);
             list.RefreshSelected();
             Raise();
         }
@@ -489,6 +507,11 @@ namespace Watchkeeper.UI
                 ActionEditor e = ed;
                 e.Targets = delegate { return cfg.Vmix; };
                 e.Inputs = delegate(string id) { List<VmixInput> l; return inputs.TryGetValue(id, out l) ? l : null; };
+                e.Studios = delegate
+                {
+                    AppConfig c = M.Config.Get();
+                    return c.General.Modules.Studios ? c.Studios.Studios : new List<StudioDef>();
+                };
                 e.Changed += delegate { if (fill == 0 && !Loading) { MarkDirty(); triggers.RefreshSelected(); } };
                 e.RunRequested += delegate { RunNow(e == onEd ? "on" : "off", e); };
             }

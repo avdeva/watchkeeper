@@ -27,6 +27,8 @@ namespace Watchkeeper
         public double NextAction;          // epoch of the next start / scheduled restart, 0 = none
         public double NextScheduledRestart;
         public string Kind = "program";
+        /// <summary>False when the entry is not run because none of its studios is active (Studios part).</summary>
+        public bool InStudio = true;
         public string Health = "";         // "" (no check) | waiting | ok | failing
         public string HealthText = "";
     }
@@ -89,6 +91,8 @@ namespace Watchkeeper
         public Func<string, int, string> HealthProbe = Net.Probe;
         /// <summary>Tests: run the health probe inside Tick instead of on a worker thread.</summary>
         public bool HealthInline;
+        /// <summary>Studios part: false for an entry that belongs to studios none of which is active (it is then not run).</summary>
+        public Func<ProgramJob, bool> InStudio = delegate { return true; };
 
         public Supervisor(Func<AppConfig> config, ILauncher launcher, IProcessTable table, ISessions sessions, LogHub hub)
             : this(config, launcher, table, sessions, new SystemServiceControl(), hub) { }
@@ -202,6 +206,12 @@ namespace Watchkeeper
                 try
                 {
                     if (!cfg.General.Modules.Programs) { Off(st); continue; }
+                    if (p.Enabled && !InStudio(p))
+                    {
+                        Off(st);
+                        Set(st, "off", "Not in the active studio");
+                        continue;
+                    }
                     if (p.Kind == "service") CheckService(p, st, nowDt, now, cfg.General.DryRun);
                     else Check(p, st, nowDt, now, session, cfg.General.DryRun);
                 }
@@ -803,6 +813,99 @@ namespace Watchkeeper
             }
         }
 
+        /// <summary>Studio switch: make the next check start this entry at once (no first-start delay).</summary>
+        public void StartSoon(string id)
+        {
+            lock (lk)
+            {
+                Slot st;
+                if (!states.TryGetValue(id, out st)) { st = new Slot(); states[id] = st; }
+                st.StartAt = 0;
+                st.StartAtSet = true;
+                st.StartTimes.Clear();
+                st.PausedAlerted = false;
+            }
+        }
+
+        /// <summary>Studio switch: close every process of this entry (or stop its Windows service). A program in the
+        /// signed-in session is first asked to close as if its window were closed (taskkill without /F, run in that
+        /// session), and ended after timeoutSeconds if it is still running. Null when nothing of it runs any more,
+        /// otherwise what is still running. Call while the entry is not supervised (outside the active studio).</summary>
+        public string CloseForSwitch(ProgramJob p, int timeoutSeconds, Func<bool> cancelled)
+        {
+            Slot st;
+            lock (lk)
+            {
+                if (!states.TryGetValue(p.Id, out st)) { st = new Slot(); states[p.Id] = st; }
+                st.ExpectExit = true;
+            }
+            if (p.Kind == "service")
+            {
+                string status = services.Status(p.ServiceName);
+                if (status == "missing" || status == "stopped") return null;
+                log.Info(p.Name + ": stopping the Windows service " + p.ServiceName + " (studio switch).");
+                try { services.Stop(p.ServiceName, Math.Max(5, timeoutSeconds) * 1000); }
+                catch (Exception ex) { return p.Name + ": the service did not stop: " + ex.Message; }
+                status = services.Status(p.ServiceName);
+                return status == "stopped" || status == "missing" ? null : p.Name + ": the service is still " + status;
+            }
+            string name = ProcessNameOf(p);
+            List<int> sessionsToCheck = new List<int>();
+            string user;
+            int console = sessions.ConsoleUserSession(out user);
+            if (p.RunAs == "user") { if (console >= 0) sessionsToCheck.Add(console); }
+            else sessionsToCheck.Add(0);
+            if (st.Session >= 0 && !sessionsToCheck.Contains(st.Session)) sessionsToCheck.Add(st.Session);
+            List<ProcInfo> found = new List<ProcInfo>();
+            foreach (int sid in sessionsToCheck) found.AddRange(FindIn(p, name, sid));
+            if (found.Count == 0) return null;
+            log.Info(p.Name + ": closing " + found.Count + " process(es) for the studio switch.");
+            bool asked = false;
+            foreach (ProcInfo pi in found)
+            {
+                if (pi.SessionId <= 0) continue;           // no windows in the service session: ended below
+                try
+                {
+                    StartRequest r = new StartRequest();
+                    r.File = Util.SystemExe("taskkill.exe");
+                    r.Arguments = "/PID " + pi.Pid;
+                    r.UserSession = true;
+                    r.Hidden = true;
+                    using (IRunning t = launcher.Start(r)) t.WaitForExit(5000);
+                    asked = true;
+                }
+                catch (Exception ex) { log.Warn(p.Name + ": could not ask PID " + pi.Pid + " to close: " + ex.Message); }
+            }
+            double until = Util.Now() + (asked ? Math.Max(1, timeoutSeconds) : 0);
+            while (Util.Now() < until)
+            {
+                if (cancelled != null && cancelled()) break;
+                if (StillRunning(p, name, sessionsToCheck).Count == 0) { log.Info(p.Name + ": closed."); return null; }
+                Thread.Sleep(250);
+            }
+            List<ProcInfo> left = StillRunning(p, name, sessionsToCheck);
+            foreach (ProcInfo pi in left)
+            {
+                try { table.Kill(pi.Pid); }
+                catch (Exception ex) { log.Warn(p.Name + ": could not end PID " + pi.Pid + ": " + ex.Message); }
+            }
+            if (left.Count > 0) log.Warn(p.Name + ": ended " + left.Count + " process(es) that did not close" + (asked ? " within " + timeoutSeconds + "s" : "") + ".");
+            for (int i = 0; i < 20; i++)
+            {
+                left = StillRunning(p, name, sessionsToCheck);
+                if (left.Count == 0) return null;
+                Thread.Sleep(250);
+            }
+            return p.Name + ": still running (PID " + left[0].Pid + ") after it was ended";
+        }
+
+        List<ProcInfo> StillRunning(ProgramJob p, string name, List<int> sessionIds)
+        {
+            List<ProcInfo> o = new List<ProcInfo>();
+            foreach (int sid in sessionIds) o.AddRange(FindIn(p, name, sid));
+            return o;
+        }
+
         public List<ProgramStatus> Snapshot()
         {
             AppConfig cfg = config();
@@ -817,11 +920,13 @@ namespace Watchkeeper
                     s.Name = p.Name;
                     s.Enabled = p.Enabled && cfg.General.Modules.Programs;
                     s.Kind = p.Kind;
+                    try { s.InStudio = InStudio(p); } catch (Exception) { s.InStudio = true; }
                     Slot st;
                     if (states.TryGetValue(p.Id, out st))
                     {
                         s.State = p.Enabled ? st.State : "off";
                         s.StateText = p.Enabled ? st.StateText : "Not supervised";
+
                         s.Pid = st.Pid;
                         s.Session = st.Session;
                         s.RunningSince = st.RunningSince;

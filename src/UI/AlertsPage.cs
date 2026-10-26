@@ -29,7 +29,7 @@ namespace Watchkeeper.UI
         readonly TextBox rName = Ui.Text(320);
         readonly RadioButton rAll = Ui.Radio("All alerts, from every part of Watchkeeper");
         readonly RadioButton rSome = Ui.Radio("Only alerts from the parts ticked below");
-        readonly CheckedListBox rParts = Checks(320, 7);
+        readonly CheckedListBox rParts = Checks(320, 8);
         readonly CheckedListBox rItems = Checks(420, 8);
         readonly Label rItemsNote = Ui.Hint("");
         readonly ComboBox rSeverity;

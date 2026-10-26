@@ -6,6 +6,7 @@ using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using Watchkeeper;
 
@@ -293,4 +294,82 @@ namespace Watchkeeper.Tests
 
         public void Dispose() { try { l.Stop(); } catch (Exception) { } }
     }
+    /// <summary>A stand-in for Pathfinder Core PRO's SapV2 port: login, set and get of memory slots.</summary>
+    public class FakePathfinder : IDisposable
+    {
+        readonly TcpListener listener;
+        readonly Thread thread;
+        public readonly Dictionary<string, string> Slots = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        public readonly List<string> Received = new List<string>();
+        public string User = "watchkeeper", Password = "s3cret";
+        public int Logins;
+        TcpClient current;
+        public int Port { get { return ((IPEndPoint)listener.LocalEndpoint).Port; } }
+
+        static readonly Regex SetRx = new Regex("^set MemorySlots#0\\.MemorySlot#(\\S+) SlotValue=\"(.*)\"$", RegexOptions.IgnoreCase);
+        static readonly Regex GetRx = new Regex("^get MemorySlots#0\\.MemorySlot#(\\S+) SlotValue$", RegexOptions.IgnoreCase);
+
+        public FakePathfinder()
+        {
+            listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            thread = new Thread(Serve);
+            thread.IsBackground = true;
+            thread.Start();
+        }
+
+        public string Slot(string name) { lock (Slots) { string v; return Slots.TryGetValue(name, out v) ? v : null; } }
+        public void SetSlot(string name, string value) { lock (Slots) Slots[name] = value; }
+        public void Drop() { try { if (current != null) current.Close(); } catch (Exception) { } }
+
+        void Serve()
+        {
+            while (true)
+            {
+                TcpClient c;
+                try { c = listener.AcceptTcpClient(); }
+                catch (Exception) { return; }
+                current = c;
+                try
+                {
+                    StreamReader r = new StreamReader(c.GetStream(), Encoding.UTF8);
+                    StreamWriter w = new StreamWriter(c.GetStream(), new UTF8Encoding(false));
+                    w.NewLine = "\r\n";
+                    w.AutoFlush = true;
+                    bool authed = false;
+                    string line;
+                    while ((line = r.ReadLine()) != null)
+                    {
+                        line = line.Trim();
+                        lock (Received) Received.Add(line);
+                        if (line.StartsWith("Login ", StringComparison.OrdinalIgnoreCase))
+                        {
+                            authed = line == "Login " + User + " " + Password;
+                            w.WriteLine(authed ? "login successful" : "login failed");
+                            if (authed) Logins++;
+                            continue;
+                        }
+                        if (!authed) continue;
+                        Match m = SetRx.Match(line);
+                        if (m.Success) { SetSlot(m.Groups[1].Value, m.Groups[2].Value); continue; }
+                        m = GetRx.Match(line);
+                        if (m.Success)
+                        {
+                            string v = Slot(m.Groups[1].Value);
+                            if (v != null) w.WriteLine("indi MemorySlots#0.MemorySlot#" + m.Groups[1].Value + " SlotValue=\"" + v + "\"");
+                        }
+                    }
+                }
+                catch (Exception) { }
+                try { c.Close(); } catch (Exception) { }
+            }
+        }
+
+        public void Dispose()
+        {
+            try { listener.Stop(); } catch (Exception) { }
+            Drop();
+        }
+    }
+
 }

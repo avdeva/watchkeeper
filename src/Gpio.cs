@@ -58,7 +58,9 @@ namespace Watchkeeper
 
     public class GpioAction
     {
-        public string Type = "vmix";            // vmix | http
+        public string Type = "vmix";            // vmix | http | studio (switch this server to a studio; Studios part)
+        /// <summary>studio: the studio id to switch to, or "none" for no studio.</summary>
+        public string Studio = "";
         public string VmixId = "";              // empty = the first vMix
         public string Function = "Cut";
         public string Input = "";
@@ -527,6 +529,9 @@ namespace Watchkeeper
             public double LastLine;
             public string Version = "";
             public bool Alerted;
+            readonly object writeLock = new object();
+            Stream current;               // the open connection, for lines sent by others (studio status)
+            bool loggedIn;
 
             public DeviceLink(GpioService owner, AxiaDevice d, string sig)
             {
@@ -581,6 +586,7 @@ namespace Watchkeeper
                     }
                     finally
                     {
+                        lock (writeLock) { current = null; loggedIn = false; }
                         try { if (client != null) client.Close(); } catch (Exception) { }
                         client = null;
                     }
@@ -593,8 +599,34 @@ namespace Watchkeeper
             void Send(Stream s, string line)
             {
                 byte[] b = Encoding.ASCII.GetBytes(line + "\r\n");
-                s.Write(b, 0, b.Length);
-                s.Flush();
+                lock (writeLock)
+                {
+                    s.Write(b, 0, b.Length);
+                    s.Flush();
+                }
+            }
+
+            /// <summary>Send a line on the open connection, logging in first (LOGIN, with the device password) when the
+            /// device was not logged in. Null when sent, otherwise why not.</summary>
+            public string SendLine(string line)
+            {
+                lock (writeLock)
+                {
+                    Stream s = current;
+                    if (s == null || State != "connected") return "not connected (" + Text + ")";
+                    try
+                    {
+                        if (!loggedIn)
+                        {
+                            string pw = Secrets.Unprotect(Device.Password);
+                            Send(s, pw.Length > 0 ? "LOGIN " + pw : "LOGIN");
+                            loggedIn = true;
+                        }
+                        Send(s, line);
+                        return null;
+                    }
+                    catch (Exception ex) { return "sending failed: " + ex.Message; }
+                }
             }
 
             void Session()
@@ -608,6 +640,7 @@ namespace Watchkeeper
                     string pw = Secrets.Unprotect(Device.Password);
                     Send(s, pw.Length > 0 ? "LOGIN " + pw : "LOGIN");
                 }
+                lock (writeLock) { current = s; loggedIn = Device.Login; }
                 Send(s, "VER");
                 Send(s, "ADD GPI");
                 Send(s, "ADD GPO");
@@ -659,6 +692,16 @@ namespace Watchkeeper
                     }
                 }
             }
+        }
+
+        /// <summary>Send one LWRP line (for example "GPI 1 lxxxx") to a connected device, logging in first if needed.
+        /// Null when sent, otherwise why not.</summary>
+        public string SendLine(string deviceId, string line)
+        {
+            DeviceLink l;
+            lock (lk) links.TryGetValue(deviceId ?? "", out l);
+            if (l == null) return "the device is not connected (switched off, or the GPIO part is off)";
+            return l.SendLine(line);
         }
 
         void ForgetSync(string deviceId)
@@ -857,10 +900,24 @@ namespace Watchkeeper
             return o;
         }
 
+        /// <summary>(studio id or "none", what asked for it) -> result. Set by the engine; null when the Studios part is not running.</summary>
+        public static Func<string, string, ActionResult> StudioSwitch;
+
         public static ActionResult RunAction(GpioAction a, List<VmixTarget> vmix)
         {
             try
             {
+                if (a.Type == "studio")
+                {
+                    Func<string, string, ActionResult> sw = StudioSwitch;
+                    if (sw == null)
+                    {
+                        ActionResult off = new ActionResult();
+                        off.Text = "Switch studio - the Studios part is not running on this server";
+                        return off;
+                    }
+                    return sw(a.Studio, "GPIO trigger");
+                }
                 if (a.Type == "http")
                 {
                     HttpRequestSpec s = new HttpRequestSpec();

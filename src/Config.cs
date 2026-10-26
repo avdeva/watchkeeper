@@ -53,6 +53,8 @@ namespace Watchkeeper
         public bool Scripts = true;
         public bool Vertical = true;
         public bool Gpio = true;
+        /// <summary>Studios: switch between studio configurations on Pathfinder's instruction, report status to Pathfinder.</summary>
+        public bool Studios = false;
     }
 
     // ------------------------------------------------------------ folder policies
@@ -137,6 +139,9 @@ namespace Watchkeeper
         public int HealthFailSeconds = 60;        // no good answer for this long = not healthy
         public int HealthGraceSeconds = 90;       // after it (re)starts, before the first check counts
         public string HealthAction = "alert";     // alert | restart
+        /// <summary>Studios part: the studios (ids) this entry belongs to. Empty = it runs whatever studio is active.
+        /// Otherwise it runs only while one of these studios is active, and is closed when the server switches away.</summary>
+        public List<string> Studios = new List<string>();
         public string Notes = "";
     }
 
@@ -254,12 +259,13 @@ namespace Watchkeeper
         public List<ScriptJob> Scripts = new List<ScriptJob>();
         public VerticalCfg Vertical = new VerticalCfg();
         public GpioCfg Gpio = new GpioCfg();
+        public StudiosCfg Studios = new StudiosCfg();
         public AlertCfg Alerts = new AlertCfg();
     }
 
     public static class Cfg
     {
-        public static readonly string[] Sections = { "general", "folders", "programs", "scripts", "vertical", "gpio", "alerts" };
+        public static readonly string[] Sections = { "general", "folders", "programs", "scripts", "vertical", "gpio", "studios", "alerts" };
         public static readonly string[] Backends = { "intel_qsv", "nvidia_nvenc", "amd_amf", "cpu" };
         public static readonly string[] Days = { "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday" };
 
@@ -339,6 +345,7 @@ namespace Watchkeeper
             c.Scripts = c.Scripts ?? new List<ScriptJob>();
             c.Vertical = c.Vertical ?? new VerticalCfg();
             c.Gpio = c.Gpio ?? new GpioCfg();
+            c.Studios = c.Studios ?? new StudiosCfg();
             c.Alerts = c.Alerts ?? new AlertCfg();
 
             GeneralCfg g = c.General, dg = new GeneralCfg();
@@ -376,6 +383,7 @@ namespace Watchkeeper
 
             NormalizeVertical(c.Vertical);
             NormalizeGpio(c.Gpio);
+            StudioSettings.Normalize(c.Studios);
 
             NormalizeAlerts(c.Alerts);
         }
@@ -439,7 +447,8 @@ namespace Watchkeeper
             foreach (GpioAction raw in list)
             {
                 GpioAction a = raw ?? new GpioAction();
-                a.Type = C(a.Type, new[] { "vmix", "http" }, "vmix");
+                a.Type = C(a.Type, new[] { "vmix", "http", "studio" }, "vmix");
+                a.Studio = S(a.Studio, "");
                 a.VmixId = S(a.VmixId, "");
                 a.Function = S(a.Function, "");
                 a.Input = S(a.Input, "");
@@ -483,7 +492,11 @@ namespace Watchkeeper
                 all.AddRange(t.OnInactive);
                 foreach (GpioAction a in all)
                 {
-                    if (a.Type == "vmix")
+                    if (a.Type == "studio")
+                    {
+                        if (a.Studio.Length == 0) errors.Add(l + ": a 'switch studio' action has no studio");
+                    }
+                    else if (a.Type == "vmix")
                     {
                         if (a.Function.Length == 0) errors.Add(l + ": a vMix action has no function");
                         if (g.Vmix.Count == 0) errors.Add(l + ": add a vMix on the vMix tab for its vMix actions");
@@ -517,6 +530,7 @@ namespace Watchkeeper
                 case "scripts": return m.Scripts;
                 case "vertical": return m.Vertical;
                 case "gpio": return m.Gpio;
+                case "studios": return m.Studios;
             }
             return true;
         }
@@ -584,6 +598,9 @@ namespace Watchkeeper
             p.HealthFailSeconds = I(p.HealthFailSeconds, 5, 86400);
             p.HealthGraceSeconds = I(p.HealthGraceSeconds, 0, 3600);
             p.HealthAction = C(p.HealthAction, new[] { "alert", "restart" }, "alert");
+            List<string> studios = new List<string>();
+            if (p.Studios != null) foreach (string sid in p.Studios) if (!string.IsNullOrEmpty(sid) && !studios.Contains(sid.Trim())) studios.Add(sid.Trim());
+            p.Studios = studios;
             p.Notes = S(p.Notes, "");
         }
 
@@ -791,6 +808,10 @@ namespace Watchkeeper
                     errors.AddRange(ValidateGpio(c.Gpio));
                     break;
 
+                case "studios":
+                    errors.AddRange(StudioSettings.Validate(c));
+                    break;
+
                 case "folders":
                     for (int i = 0; i < c.Folders.Count; i++)
                         errors.AddRange(ValidateFolder(c.Folders[i], "folder " + (i + 1) + " (" + c.Folders[i].Name + ")"));
@@ -873,6 +894,7 @@ namespace Watchkeeper
                 case "scripts": return c.Scripts;
                 case "vertical": return c.Vertical;
                 case "gpio": return c.Gpio;
+                case "studios": return c.Studios;
                 case "alerts": return c.Alerts;
             }
             return null;
@@ -888,6 +910,7 @@ namespace Watchkeeper
                 case "scripts": c.Scripts = value as List<ScriptJob>; return c.Scripts != null;
                 case "vertical": c.Vertical = value as VerticalCfg; return c.Vertical != null;
                 case "gpio": c.Gpio = value as GpioCfg; return c.Gpio != null;
+                case "studios": c.Studios = value as StudiosCfg; return c.Studios != null;
                 case "alerts": c.Alerts = value as AlertCfg; return c.Alerts != null;
             }
             return false;
@@ -1083,6 +1106,7 @@ namespace Watchkeeper
             c.General.Modules.Scripts = false;
             c.General.Modules.Vertical = false;
             c.General.Modules.Gpio = false;
+            c.General.Modules.Studios = false;
         }
 
         /// <summary>Every password, token and secret address of a configuration: map(label, value) returns the value to keep.</summary>
@@ -1101,6 +1125,8 @@ namespace Watchkeeper
             foreach (ProgramJob p in c.Programs) p.HealthPassword = map("Watchdog " + p.Name + ": health check password", p.HealthPassword ?? "");
             foreach (AxiaDevice d in c.Gpio.Devices) d.Password = map("GPIO device " + d.Name + ": password", d.Password ?? "");
             foreach (VmixTarget v in c.Gpio.Vmix) v.Password = map("vMix " + v.Name + ": password", v.Password ?? "");
+            if (c.Studios != null && c.Studios.Pathfinder != null)
+                c.Studios.Pathfinder.Password = map("Pathfinder: password", c.Studios.Pathfinder.Password ?? "");
             foreach (GpioTrigger t in c.Gpio.Triggers)
             {
                 foreach (GpioAction a in t.OnActive) a.Password = map("GPIO trigger " + t.Name + ": HTTP password", a.Password ?? "");

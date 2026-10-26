@@ -45,6 +45,8 @@ namespace Watchkeeper.UI
         readonly Button hTest;
         readonly Label hResult = new Label();
         readonly TextBox pNotes = Ui.Text(420);
+        readonly CheckedListBox pStudios = new CheckedListBox();
+        readonly List<Control> studioRows = new List<Control>();
         readonly Label live = new Label();
         readonly Button restartBtn;
         readonly List<Control> programOnly = new List<Control>();
@@ -78,7 +80,8 @@ namespace Watchkeeper.UI
             list.Subtitle = delegate(ProgramJob p)
             {
                 if (p.Kind == "service") return p.ServiceName.Length == 0 ? "No service chosen yet" : "Windows service " + p.ServiceName;
-                return p.ExePath.Length == 0 ? "No program chosen yet" : p.ExePath;
+                string inStudios = StudioNames(p);
+                return (p.ExePath.Length == 0 ? "No program chosen yet" : p.ExePath) + (inStudios.Length > 0 ? "  -  " + inStudios : "");
             };
             list.Badge = delegate(ProgramJob p)
             {
@@ -120,6 +123,16 @@ namespace Watchkeeper.UI
             g.Row(null, pElevate);
             g.Note("Only for programs that need it, kept in a folder only administrators can change (Watchkeeper checks this before every start).");
             g.Row("Priority", pPriority);
+            pStudios.CheckOnClick = true;
+            pStudios.IntegralHeight = false;
+            pStudios.Width = 300;
+            pStudios.Height = 90;
+            pStudios.Anchor = AnchorStyles.Left;
+            pStudios.Tag = "nodirty";
+            int before = g.Controls.Count;
+            g.Row("Studios", pStudios, "Runs only while one of the ticked studios is active, and is closed when the server switches to another studio. " +
+                                       "Nothing ticked = runs whatever studio is active. Studios are set up (and saved) on the Studios page.");
+            for (int i = before; i < g.Controls.Count; i++) studioRows.Add(g.Controls[i]);
             programOnly.AddRange(new Control[] { pExe, pArgs, pDir, pProc, pUser, pService, pPriority, pElevate });
 
             g.Header("Starting");
@@ -188,6 +201,7 @@ namespace Watchkeeper.UI
             hAlert.CheckedChanged += apply;
             hRestart.CheckedChanged += apply;
             pNotes.TextChanged += apply;
+            pStudios.ItemCheck += delegate { if (fill == 0 && !Loading) BeginInvoke((MethodInvoker)delegate { Apply(); MarkDirty(); }); };
             list.SelectedChanged += delegate { Fill(); };
             list.Changed += delegate { MarkDirty(); };
 
@@ -369,6 +383,7 @@ namespace Watchkeeper.UI
                     hAlert.Checked = d.HealthAction != "restart";
                     hRestart.Checked = d.HealthAction == "restart";
                     pNotes.Text = d.Notes;
+                    FillStudios(d);
                 });
             }
             finally { fill--; }
@@ -409,7 +424,33 @@ namespace Watchkeeper.UI
             p.HealthGraceSeconds = (int)hGrace.Value;
             p.HealthAction = hRestart.Checked ? "restart" : "alert";
             p.Notes = pNotes.Text;
+            List<string> ids = new List<string>();
+            List<StudioDef> known = M.Config.Get().Studios.Studios;
+            foreach (object o in pStudios.CheckedItems) { Choice c = o as Choice; if (c != null) ids.Add(c.Value); }
+            foreach (string sid in p.Studios)        // studios that no longer exist stay (the settings check names them)
+                if (!known.Exists(delegate(StudioDef x) { return x.Id == sid; }) && !ids.Contains(sid)) ids.Add(sid);
+            p.Studios = ids;
             list.RefreshSelected();
+        }
+
+        void FillStudios(ProgramJob p)
+        {
+            AppConfig c = M.Config.Get();
+            bool on = c.General.Modules.Studios;
+            foreach (Control x in studioRows) x.Visible = on;
+            pStudios.Items.Clear();
+            foreach (StudioDef d in c.Studios.Studios)
+                pStudios.Items.Add(new Choice(d.Id, d.Name + "  (" + d.Code + ")"), p.Studios.Contains(d.Id));
+        }
+
+        string StudioNames(ProgramJob p)
+        {
+            if (p.Studios.Count == 0) return "";
+            AppConfig c = M.Config.Get();
+            if (!c.General.Modules.Studios) return "";
+            List<string> n = new List<string>();
+            foreach (string sid in p.Studios) n.Add(StudioSettings.NameOf(c.Studios, sid));
+            return string.Join(", ", n.ToArray());
         }
 
         void TestHealth()
@@ -502,6 +543,13 @@ namespace Watchkeeper.UI
             if (s == null) { live.Text = ""; return; }
             live.ForeColor = s.Health == "failing" ? Ui.Bad : s.State == "running" ? Ui.Ok : s.State == "error" || s.State == "paused" ? Ui.Bad : s.State == "off" ? SystemColors.GrayText : Ui.Warn;
             live.Text = Describe(s);
+        }
+
+        /// <summary>The studios may have changed on the Studios page since this page was filled.</summary>
+        public override void OnShown()
+        {
+            ProgramJob p = list.Selected;
+            if (p != null) Quiet(delegate { fill++; try { FillStudios(p); } finally { fill--; } });
         }
 
         protected override void LoadFrom(AppConfig c)

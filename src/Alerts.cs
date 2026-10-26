@@ -178,6 +178,7 @@ namespace Watchkeeper
             switch (kind)
             {
                 case "program_restart":
+                case "studio_switch":
                 case "service_start": return "warning";
                 case "recovered":
                 case "test": return "info";
@@ -192,6 +193,7 @@ namespace Watchkeeper
             if (k.StartsWith("script:")) return "scripts";
             if (k.StartsWith("program:")) return "programs";
             if (k.StartsWith("gpio")) return "gpio";
+            if (k.StartsWith("studio")) return "studios";
             if (k.StartsWith("vertical") || kind == "conversion_failure") return "vertical";
             if (kind == "config_problem" || k == "config") return "config";
             return "service";

@@ -389,9 +389,23 @@ namespace Watchkeeper.Tests
         public FakeRunning Last;
         int nextPid = 1000;
 
+        /// <summary>taskkill /PID n (studio switch: asking a program to close) closes it, as a program that obeys does.</summary>
+        public bool ClosesOnRequest = true;
+
         public IRunning Start(StartRequest r)
         {
             if (FailStart != null) throw new InvalidOperationException(FailStart);
+            if (Watchkeeper.Procs.Stem(r.File) == "taskkill")
+            {
+                Starts.Add(r);
+                int pid;
+                if (ClosesOnRequest && int.TryParse(r.Arguments.Replace("/PID", "").Trim(), out pid))
+                    lock (Procs) Procs.RemoveAll(delegate(ProcInfo x) { return x.Pid == pid; });
+                FakeRunning k = new FakeRunning();
+                k.pid = nextPid++;
+                k.exited = true;
+                return k;
+            }
             Starts.Add(r);
             FakeRunning f = new FakeRunning();
             f.pid = nextPid++;
