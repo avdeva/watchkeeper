@@ -1,0 +1,747 @@
+{
+  "version": 4,
+  "general": {
+    "ffmpeg_path": "C:\\Program Files\\ffmpeg\\bin\\ffmpeg.exe",
+    "ffprobe_path": "C:\\Program Files\\ffmpeg\\bin\\ffprobe.exe",
+    "ffmpeg_account": "local_service",
+    "dry_run": false,
+    "service_priority": "high",
+    "server_label": "Studio A server",
+    "modules": {
+      "folders": true,
+      "programs": true,
+      "scripts": true,
+      "vertical": true,
+      "gpio": true,
+      "studios": false
+    },
+    "profile": "studio"
+  },
+  "folders": [
+    {
+      "id": "13be6896",
+      "name": "Move ISO  T: > D:",
+      "enabled": true,
+      "path": "T:\\ISO",
+      "destination": "D:\\ISO",
+      "schedule": {
+        "mode": "interval",
+        "time": "00:00",
+        "interval_minutes": 1,
+        "day": "sunday",
+        "catch_up": true
+      },
+      "subfolders": false,
+      "min_age_seconds": 60,
+      "remove_empty_folders": false,
+      "rules": [
+        {
+          "id": "6efed5f3",
+          "name": "Move every file",
+          "enabled": true,
+          "action": "move",
+          "destination": "",
+          "keep_subfolders": true,
+          "on_conflict": "rename",
+          "pattern": "*",
+          "exclude": "",
+          "older_than": 0,
+          "older_than_unit": "days",
+          "min_size_mb": 0,
+          "max_size_mb": 0,
+          "use_window": false,
+          "window_start": "00:00",
+          "window_end": "23:59",
+          "window_mode": "inside",
+          "window_source": "modified",
+          "keep_newest": 0,
+          "stamp_from_name": false
+        },
+        {
+          "id": "k1",
+          "name": "Keep tmp",
+          "enabled": true,
+          "action": "keep",
+          "pattern": "*.tmp"
+        },
+        {
+          "id": "d1",
+          "name": "Old",
+          "enabled": true,
+          "action": "delete",
+          "pattern": "*.mp4",
+          "older_than": 2,
+          "older_than_unit": "weeks",
+          "use_window": true
+        }
+      ],
+      "notes": "Cache to data drive, every minute. Files still being recorded are left until they are finished."
+    },
+    {
+      "id": "23573063",
+      "name": "Move PGM1  T: > D:",
+      "enabled": false,
+      "path": "T:\\PGM1",
+      "destination": "D:\\PGM1",
+      "schedule": {
+        "mode": "interval",
+        "time": "00:00",
+        "interval_minutes": 1,
+        "day": "sunday",
+        "catch_up": true
+      },
+      "subfolders": false,
+      "min_age_seconds": 60,
+      "remove_empty_folders": false,
+      "rules": [
+        {
+          "id": "d4530bfd",
+          "name": "Move every file",
+          "enabled": true,
+          "action": "move",
+          "destination": "",
+          "keep_subfolders": true,
+          "on_conflict": "rename",
+          "pattern": "*",
+          "exclude": "",
+          "older_than": 0,
+          "older_than_unit": "days",
+          "min_size_mb": 0,
+          "max_size_mb": 0,
+          "use_window": false,
+          "window_start": "00:00",
+          "window_end": "23:59",
+          "window_mode": "inside",
+          "window_source": "modified",
+          "keep_newest": 0,
+          "stamp_from_name": false
+        }
+      ],
+      "notes": "Cache to data drive, every minute. Files still being recorded are left until they are finished."
+    },
+    {
+      "id": "ed0385b1",
+      "name": "Producer cam sort  T: > D:",
+      "enabled": false,
+      "path": "T:\\Producer_Cam",
+      "destination": "D:\\ISO",
+      "schedule": {
+        "mode": "interval",
+        "time": "00:00",
+        "interval_minutes": 1,
+        "day": "sunday",
+        "catch_up": true
+      },
+      "subfolders": false,
+      "min_age_seconds": 60,
+      "remove_empty_folders": false,
+      "rules": [
+        {
+          "id": "3f820415",
+          "name": "Started 05:45-09:00: move to ISO",
+          "enabled": true,
+          "action": "move",
+          "destination": "",
+          "keep_subfolders": true,
+          "on_conflict": "overwrite",
+          "pattern": "*.mp4;*.avi;*.mkv;*.mov",
+          "exclude": "",
+          "older_than": 0,
+          "older_than_unit": "days",
+          "min_size_mb": 0,
+          "max_size_mb": 0,
+          "use_window": true,
+          "window_start": "05:45",
+          "window_end": "09:00",
+          "window_mode": "inside",
+          "window_source": "filename",
+          "keep_newest": 0,
+          "stamp_from_name": true
+        },
+        {
+          "id": "3cfdcf0c",
+          "name": "Started outside the window: delete",
+          "enabled": true,
+          "action": "delete",
+          "destination": "",
+          "keep_subfolders": true,
+          "on_conflict": "overwrite",
+          "pattern": "*.mp4;*.avi;*.mkv;*.mov",
+          "exclude": "",
+          "older_than": 0,
+          "older_than_unit": "days",
+          "min_size_mb": 0,
+          "max_size_mb": 0,
+          "use_window": true,
+          "window_start": "05:45",
+          "window_end": "09:00",
+          "window_mode": "outside",
+          "window_source": "filename",
+          "keep_newest": 0,
+          "stamp_from_name": false
+        },
+        {
+          "id": "b673cc70",
+          "name": "Anything else: move to D:\\Producer_Cam",
+          "enabled": true,
+          "action": "move",
+          "destination": "D:\\Producer_Cam",
+          "keep_subfolders": true,
+          "on_conflict": "rename",
+          "pattern": "*",
+          "exclude": "",
+          "older_than": 0,
+          "older_than_unit": "days",
+          "min_size_mb": 0,
+          "max_size_mb": 0,
+          "use_window": false,
+          "window_start": "00:00",
+          "window_end": "23:59",
+          "window_mode": "inside",
+          "window_source": "modified",
+          "keep_newest": 0,
+          "stamp_from_name": false
+        }
+      ],
+      "notes": "Every minute. Recordings started 05:45-09:00 move to D:\\ISO, other recordings are deleted, anything else moves to D:\\Producer_Cam, so the cache folder is emptied."
+    },
+    {
+      "id": "14bbbfec",
+      "name": "Retention D:\\ISO (7 days)",
+      "enabled": false,
+      "path": "D:\\ISO",
+      "destination": "",
+      "schedule": {
+        "mode": "interval",
+        "time": "00:00",
+        "interval_minutes": 60,
+        "day": "sunday",
+        "catch_up": true
+      },
+      "subfolders": true,
+      "min_age_seconds": 120,
+      "remove_empty_folders": false,
+      "rules": [
+        {
+          "id": "ff3aa03c",
+          "name": "Delete after 7 days",
+          "enabled": true,
+          "action": "delete",
+          "destination": "",
+          "keep_subfolders": true,
+          "on_conflict": "overwrite",
+          "pattern": "*",
+          "exclude": "",
+          "older_than": 7,
+          "older_than_unit": "days",
+          "min_size_mb": 0,
+          "max_size_mb": 0,
+          "use_window": false,
+          "window_start": "00:00",
+          "window_end": "23:59",
+          "window_mode": "inside",
+          "window_source": "modified",
+          "keep_newest": 0,
+          "stamp_from_name": false
+        }
+      ],
+      "notes": "Retention on the data drive. The cache drive needs none: the move policies empty it every minute."
+    },
+    {
+      "id": "03902a28",
+      "name": "Retention D:\\PGM1 (7 days)",
+      "enabled": false,
+      "path": "D:\\PGM1",
+      "destination": "",
+      "schedule": {
+        "mode": "interval",
+        "time": "00:00",
+        "interval_minutes": 60,
+        "day": "sunday",
+        "catch_up": true
+      },
+      "subfolders": true,
+      "min_age_seconds": 120,
+      "remove_empty_folders": false,
+      "rules": [
+        {
+          "id": "f2cf8659",
+          "name": "Delete after 7 days",
+          "enabled": true,
+          "action": "delete",
+          "destination": "",
+          "keep_subfolders": true,
+          "on_conflict": "overwrite",
+          "pattern": "*",
+          "exclude": "",
+          "older_than": 7,
+          "older_than_unit": "days",
+          "min_size_mb": 0,
+          "max_size_mb": 0,
+          "use_window": false,
+          "window_start": "00:00",
+          "window_end": "23:59",
+          "window_mode": "inside",
+          "window_source": "modified",
+          "keep_newest": 0,
+          "stamp_from_name": false
+        }
+      ],
+      "notes": "Retention on the data drive. The cache drive needs none: the move policies empty it every minute."
+    },
+    {
+      "id": "7d63aada",
+      "name": "Retention D:\\Vertical (7 days)",
+      "enabled": false,
+      "path": "D:\\Vertical",
+      "destination": "",
+      "schedule": {
+        "mode": "interval",
+        "time": "00:00",
+        "interval_minutes": 60,
+        "day": "sunday",
+        "catch_up": true
+      },
+      "subfolders": true,
+      "min_age_seconds": 120,
+      "remove_empty_folders": false,
+      "rules": [
+        {
+          "id": "4aa29e42",
+          "name": "Delete after 7 days",
+          "enabled": true,
+          "action": "delete",
+          "destination": "",
+          "keep_subfolders": true,
+          "on_conflict": "overwrite",
+          "pattern": "*",
+          "exclude": "",
+          "older_than": 7,
+          "older_than_unit": "days",
+          "min_size_mb": 0,
+          "max_size_mb": 0,
+          "use_window": false,
+          "window_start": "00:00",
+          "window_end": "23:59",
+          "window_mode": "inside",
+          "window_source": "modified",
+          "keep_newest": 0,
+          "stamp_from_name": false
+        }
+      ],
+      "notes": "Retention on the data drive. The cache drive needs none: the move policies empty it every minute."
+    },
+    {
+      "id": "7d651e26",
+      "name": "Retention D:\\Producer_Cam (7 days)",
+      "enabled": false,
+      "path": "D:\\Producer_Cam",
+      "destination": "",
+      "schedule": {
+        "mode": "interval",
+        "time": "00:00",
+        "interval_minutes": 60,
+        "day": "sunday",
+        "catch_up": true
+      },
+      "subfolders": true,
+      "min_age_seconds": 120,
+      "remove_empty_folders": false,
+      "rules": [
+        {
+          "id": "56a04ac4",
+          "name": "Delete after 7 days",
+          "enabled": true,
+          "action": "delete",
+          "destination": "",
+          "keep_subfolders": true,
+          "on_conflict": "overwrite",
+          "pattern": "*",
+          "exclude": "",
+          "older_than": 7,
+          "older_than_unit": "days",
+          "min_size_mb": 0,
+          "max_size_mb": 0,
+          "use_window": false,
+          "window_start": "00:00",
+          "window_end": "23:59",
+          "window_mode": "inside",
+          "window_source": "modified",
+          "keep_newest": 0,
+          "stamp_from_name": false
+        }
+      ],
+      "notes": "Retention on the data drive. The cache drive needs none: the move policies empty it every minute."
+    }
+  ],
+  "programs": [
+    {
+      "id": "393e2416",
+      "name": "Virtual Video Director",
+      "enabled": true,
+      "kind": "program",
+      "service_name": "",
+      "exe_path": "C:\\Program Files (x86)\\noise productions ltd\\Virtual Video Director\\Virtual Video Director.exe",
+      "arguments": "\"C:\\ProgramData\\Virtual Video Director\\Profiles\\Profile.xml\"",
+      "working_dir": "",
+      "process_name": "Virtual Video Director",
+      "watch_path": "C:\\Users\\op\\AppData\\Local\\VVD\\app-*\\Virtual Video Director.exe",
+      "launcher_wait_seconds": 60,
+      "running_check": "both",
+      "run_as": "user",
+      "allow_elevation": false,
+      "start_delay_seconds": 20,
+      "restart_delay_seconds": 10,
+      "max_restarts_per_hour": 10,
+      "restart": {
+        "mode": "weekly",
+        "time": "04:30",
+        "interval_minutes": 1440,
+        "day": "monday",
+        "catch_up": true
+      },
+      "priority": "normal",
+      "health_enabled": true,
+      "health_url": "http://127.0.0.1:8088/api",
+      "health_user": "u",
+      "health_password": "plain:secret1",
+      "health_allow_plain_login": false,
+      "health_interval_seconds": 15,
+      "health_fail_seconds": 60,
+      "health_grace_seconds": 90,
+      "health_action": "alert",
+      "studios": [],
+      "notes": ""
+    },
+    {
+      "id": "63c2dc94",
+      "name": "vMix",
+      "enabled": false,
+      "kind": "program",
+      "service_name": "",
+      "exe_path": "C:\\Program Files (x86)\\vMix\\vMix64.exe",
+      "arguments": "",
+      "working_dir": "",
+      "process_name": "vMix64",
+      "watch_path": "",
+      "launcher_wait_seconds": 60,
+      "running_check": "auto",
+      "run_as": "service",
+      "allow_elevation": false,
+      "start_delay_seconds": 30,
+      "restart_delay_seconds": 10,
+      "max_restarts_per_hour": 10,
+      "restart": {
+        "mode": "manual",
+        "time": "04:00",
+        "interval_minutes": 1440,
+        "day": "sunday",
+        "catch_up": true
+      },
+      "priority": "high",
+      "health_enabled": false,
+      "health_url": "http://127.0.0.1:8088/api",
+      "health_user": "",
+      "health_password": "",
+      "health_allow_plain_login": false,
+      "health_interval_seconds": 15,
+      "health_fail_seconds": 60,
+      "health_grace_seconds": 120,
+      "health_action": "alert",
+      "studios": [
+        "s1"
+      ],
+      "notes": ""
+    }
+  ],
+  "scripts": [
+    {
+      "id": "s",
+      "name": "Backup script"
+    }
+  ],
+  "vertical": {
+    "enabled": false,
+    "watch_dir": "T:\\Vertical",
+    "out_dir": "D:\\Vertical",
+    "extensions": [
+      ".mp4"
+    ],
+    "poll_seconds": 60,
+    "after_success": "move",
+    "move_original_to": "D:\\Vertical\\Originals",
+    "max_retries": 3,
+    "sources": [
+      {
+        "id": "pgm",
+        "name": "PGM",
+        "match": "MultiCorder7",
+        "prefix": "Vertical PGM",
+        "enabled": true
+      },
+      {
+        "id": "split",
+        "name": "Split",
+        "match": "MultiCorder6",
+        "prefix": "Vertical Split",
+        "enabled": true
+      }
+    ],
+    "other": {
+      "enabled": true,
+      "prefix": "Vertical"
+    },
+    "video": {
+      "codec": "h264",
+      "profile": "high",
+      "rotation": "cclock",
+      "resolution_mode": "source",
+      "width": 0,
+      "height": 0,
+      "fps": 0,
+      "rate_mode": "match_source",
+      "fixed_mbps": 8,
+      "percent": 100,
+      "quality": 23,
+      "fallback_mbps": 8,
+      "preset": "balanced",
+      "audio_mode": "copy",
+      "audio_kbps": 192,
+      "extra_input_args": "",
+      "extra_output_args": ""
+    },
+    "gpu": {
+      "backend": "intel_qsv",
+      "adapter_name": "",
+      "adapter_index": -1,
+      "hw_decode": true,
+      "fallback_to_cpu": false,
+      "cpu_threads": 0,
+      "priority": "below_normal",
+      "session": "user_fallback"
+    }
+  },
+  "gpio": {
+    "enabled": true,
+    "devices": [
+      {
+        "id": "dev1",
+        "name": "Node 1",
+        "enabled": true,
+        "host": "10.0.0.5",
+        "port": 93,
+        "login": true,
+        "password": ""
+      }
+    ],
+    "vmix": [
+      {
+        "id": "6a4c2b95",
+        "name": "vMix (this server)",
+        "host": "127.0.0.1",
+        "port": 8088,
+        "user": "",
+        "password": "",
+        "allow_plain_login": false,
+        "timeout_ms": 3000
+      }
+    ],
+    "triggers": [
+      {
+        "id": "t1",
+        "name": "Mic live",
+        "enabled": true,
+        "device_id": "dev1",
+        "signal": "gpi",
+        "port": 3,
+        "pin": 2,
+        "invert": false,
+        "command": "",
+        "ignore_repeat_ms": 0,
+        "on_active": [
+          {
+            "type": "vmix",
+            "vmix_id": "",
+            "function": "OverlayInput1In",
+            "input": "Mic",
+            "value": "",
+            "duration": "500",
+            "selected_name": "",
+            "mix": "",
+            "extra": "",
+            "method": "GET",
+            "url": "",
+            "body": "",
+            "content_type": "application/json",
+            "user": "",
+            "password": "",
+            "allow_plain_login": false,
+            "delay_ms": 0
+          },
+          {
+            "type": "studio",
+            "studio": "s1"
+          }
+        ],
+        "on_inactive": [
+          {
+            "type": "http",
+            "function": "",
+            "method": "POST",
+            "url": "http://10.0.0.9/x",
+            "body": "{}",
+            "content_type": "application/json",
+            "user": "a",
+            "password": "b",
+            "delay_ms": 100
+          }
+        ]
+      },
+      {
+        "id": "t2",
+        "name": "Cmd",
+        "enabled": true,
+        "device_id": "dev1",
+        "signal": "cmd",
+        "port": 0,
+        "pin": 1,
+        "on_active": [],
+        "on_inactive": []
+      }
+    ],
+    "disconnect_alert_seconds": 60
+  },
+  "studios": {
+    "studios": [],
+    "start_studio": "",
+    "close_timeout_seconds": 20,
+    "min_seconds_between_switches": 30,
+    "pathfinder": {
+      "enabled": false,
+      "host": "",
+      "port": 9600,
+      "tls": false,
+      "trust_fingerprint": "",
+      "user": "",
+      "password": "",
+      "allow_plain_login": false,
+      "interval_seconds": 2,
+      "heartbeat_slot": "",
+      "status_slot": "",
+      "studio_slot": "",
+      "command_slot": ""
+    },
+    "gpio_status": {
+      "enabled": false,
+      "device_id": "",
+      "signal": "gpi",
+      "port": 1,
+      "interval_seconds": 2,
+      "heartbeat_pin": 1,
+      "ok_pin": 2,
+      "studio_pins": []
+    }
+  },
+  "alerts": {
+    "destinations": [
+      {
+        "id": "eventlog",
+        "name": "Windows Event Log",
+        "enabled": true,
+        "type": "eventlog",
+        "smtp_host": "",
+        "smtp_port": 587,
+        "smtp_tls": "starttls",
+        "smtp_trust_fingerprint": "",
+        "smtp_user": "",
+        "smtp_password": "",
+        "email_from": "",
+        "email_to": "",
+        "smtp_timeout_seconds": 20,
+        "url": "",
+        "url_hint": "",
+        "format": "text",
+        "template": "",
+        "headers": "",
+        "secret": "",
+        "proxy": "none",
+        "proxy_url": "",
+        "proxy_login": false,
+        "jira_url": "",
+        "jira_auth": "basic",
+        "jira_user": "",
+        "jira_token": "",
+        "jira_project": "",
+        "jira_issue_type": "Task",
+        "jira_priority": "",
+        "jira_labels": "watchkeeper",
+        "jira_reuse_open": true,
+        "jira_comment_recovery": true,
+        "notes": ""
+      },
+      {
+        "id": "mail",
+        "name": "Ops mail",
+        "enabled": true,
+        "type": "email",
+        "smtp_host": "smtp.example.com",
+        "smtp_port": 465,
+        "smtp_tls": "implicit",
+        "smtp_user": "ops",
+        "smtp_password": "plain:pw",
+        "email_from": "wk@example.com",
+        "email_to": "ops@example.com"
+      },
+      {
+        "id": "disc",
+        "name": "Discord",
+        "enabled": true,
+        "type": "webhook",
+        "url": "https://discord.example/hook",
+        "format": "discord"
+      },
+      {
+        "id": "unused",
+        "name": "Unused",
+        "enabled": true,
+        "type": "webhook",
+        "url": "https://x.example/"
+      }
+    ],
+    "rules": [
+      {
+        "id": "all",
+        "name": "All",
+        "enabled": true,
+        "all_parts": true,
+        "parts": [],
+        "items": [],
+        "min_severity": "warning",
+        "recoveries": true,
+        "destinations": [
+          "eventlog",
+          "mail"
+        ],
+        "cooldown_minutes": 15
+      },
+      {
+        "id": "gp",
+        "name": "GPIO",
+        "enabled": true,
+        "all_parts": false,
+        "parts": [
+          "gpio",
+          "vertical"
+        ],
+        "items": [],
+        "min_severity": "error",
+        "recoveries": false,
+        "destinations": [
+          "disc"
+        ],
+        "cooldown_minutes": 60
+      }
+    ],
+    "include_script_output": false
+  }
+}
